@@ -222,7 +222,7 @@ class FollowStopPBVSGraspNode(FoundationPoseGraspNode):
         self._last_pbvs_command = now
         self._last_pbvs_frame_stamp = float(frame_stamp)
         if current_pose is None:
-            current_pose = self.motion.get_current_ee_pose_6d(frame_id="world")
+            current_pose = self.motion.get_current_ee_pose_6d()
         current_pose = np.asarray(current_pose, dtype=float)
         if self._pbvs_orientation is None:
             self._pbvs_orientation = current_pose[3:6].copy()
@@ -338,7 +338,7 @@ class FollowStopPBVSGraspNode(FoundationPoseGraspNode):
                 last_state = None
                 continue
             current_pose = np.asarray(
-                self.motion.get_current_ee_pose_6d(frame_id="world"),
+                self.motion.get_current_ee_pose_6d(),
                 dtype=float,
             )
             target_stable, target_span = self._target_stability.update(

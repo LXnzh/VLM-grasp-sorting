@@ -233,7 +233,7 @@ def test_overview_classification_and_bin_freeze_precede_tracking(
     node.selected_path = Path(tmp_path) / "selected_object.json"
     node.rgbd_node = SimpleNamespace(K=np.eye(3))
     node.motion = SimpleNamespace(
-        get_current_ee_pose_6d=lambda **_kwargs: np.zeros(6)
+        get_current_ee_pose_6d=lambda: np.zeros(6)
     )
     node.tracking = FakeTracking()
     node._status = lambda _message: events.append("status")

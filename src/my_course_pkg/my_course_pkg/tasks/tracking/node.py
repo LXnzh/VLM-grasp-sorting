@@ -274,7 +274,7 @@ class FoundationPoseGraspNode(TargetRecoveryMixin, SimClientNode):
             "camera_frame": CAMERA_FRAME,
             "camera_intrinsic": np.asarray(self.rgbd_node.K, dtype=float).tolist(),
             "robot_pose_world": np.asarray(
-                self.motion.get_current_ee_pose_6d(frame_id="world"),
+                self.motion.get_current_ee_pose_6d(),
                 dtype=float,
             ).tolist(),
             "rgb_path": str(rgb_path),
