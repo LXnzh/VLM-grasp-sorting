@@ -6,6 +6,26 @@ The active product workspace is `E:\IFL\VLM_grasp_stable` on branch
 `codex/integrate-stable-tracking-sorting`. Its remote is
 `https://github.com/LXnzh/VLM-grasp-sorting.git`.
 
+## Source-of-truth boundary
+
+Do not redesign or independently reimplement the working dynamic chain. Use
+the following two repositories as explicit, separate sources of truth:
+
+- Dynamic GUI/VLM/SAM2/tracking/PBVS/FoundationPose/sorting chain:
+  `E:\IFL\PraktikumSoSe26_ML for Robotics` at
+  `98f386d9c1b3f4b6d7401b93e97c6ed263ebcf40`.
+- Stable grasp selection, planning, guarded execution, and lift behavior:
+  `E:\IFL\grasp_stable_pure` runtime commit
+  `c3e7a66f51ce5ff9f771a9de4a8b58ef2d986ae4`.
+
+The feature repository's `grasp/` implementation is smaller than the stable
+runtime and is not a replacement for it. The current grasp audit found only
+the intended product differences from the stable runtime: removal of the
+unsupported Tuna/Pudding paths, formatting/type cleanup, and the classified
+sorting placement suffix. Keep that boundary. When a cross-component call
+fails, compare the caller and callee contracts against the repositories above
+before writing new orchestration.
+
 The implemented product path is:
 
 1. GUI text or browser-microphone instruction;
@@ -56,7 +76,7 @@ documented in `README.md`.
 
 Verified on 2026-08-11 in the project ROS 2 Humble container:
 
-- `my_course_pkg`: 431 functional tests passed, 3 linter wrappers deselected;
+- `my_course_pkg`: 436 functional tests passed, 3 linter wrappers excluded;
 - MuJoCo simulator: 89 tests passed, including rendered RGB-D bin localization;
 - launch and delayed gripper reconnect: 53 tests passed;
 - all 10 ROS packages built successfully with `--symlink-install`;
@@ -70,3 +90,73 @@ Verified on 2026-08-11 in the project ROS 2 Humble container:
 The legacy ament Flake8 wrapper is not used as a release gate because it scans
 generated `build/` output and unrelated inherited packages. Product changes
 are instead checked directly before every handoff.
+
+## 2026-08-11 FoundationPose handoff-contract failure
+
+The first GUI launch problem was WSLg (`rdp_peer is not initialized`), not a
+ROS build hang. Restarting WSL restored the GUI. The subsequent banana task
+entered the real dynamic chain, selected/reanchored the banana mask, and then
+failed before the FoundationPose request, planning, or robot motion with:
+
+```text
+AttributeError: '_DirectMaskFoundationPose' object has no attribute
+'_validate_mask_geometry'
+```
+
+The complete preserved session log is
+`logs/gui_ros_log_20260811_214253.txt`; the traceback is near lines 1266-1280.
+Rebuilding unchanged sources could never fix this failure.
+
+Root cause: integration commit `0e4f484` copied the reference chain's
+`_DirectMaskFoundationPose._load_mask()` call to `_validate_mask_geometry()`
+but omitted the corresponding FoundationPose constructor configuration and
+method. Existing sorting tests mocked the FoundationPose boundary and
+therefore did not instantiate the broken concrete subclass.
+
+The repair mechanically restores the reference contract in
+`perception/foundationpose.py`, including the 5 px border and 200 px minimum
+area defaults, validates every candidate before ranking, and adds both the
+reference geometry tests and a concrete `_DirectMaskFoundationPose` service-
+boundary regression test. Verified after the repair:
+
+- focused FoundationPose/sorting tests: 36 passed;
+- complete `my_course_pkg` functional suite: 435 passed;
+- changed files: `compileall`, fatal-level Flake8, and `git diff --check`
+  passed;
+- `colcon build --symlink-install --packages-select my_course_pkg` passed;
+- the live ROS graph still exposed MuJoCo, MoveIt, robot-state publisher,
+  gripper adapter, and watchdog nodes with no stale grasp child process.
+
+A post-repair GUI banana motion trial is still required before calling this
+specific runtime incident fully accepted. Record its saved GUI log and result
+here; do not substitute mocked tests for that final evidence.
+
+## 2026-08-11 guarded-executor handoff-contract failure
+
+The next real banana trial proved that the repaired chain passed VLM selection,
+food classification, RGB-D food-bin localization, SAM2, stable tracking,
+FoundationPose, grasp planning, gripper opening, and the MoveIt pre-grasp move.
+It then exited at the linear approach with:
+
+```text
+TypeError: ArmMotionExecutor.move_to_pose() got an unexpected keyword argument
+'avg_speed'
+```
+
+The preserved log is `logs/gui_ros_log_20260811_220836.txt`; the successful
+upstream evidence is near lines 8948-9206 and the traceback is near lines
+9408-9428. The MuJoCo viewer merely retained the last commanded pre-grasp
+pose, so the apparently frozen viewer did not mean computation was active.
+
+Root cause: `tasks/tracking/guarded_executor.py` was integrated with the old
+course executor's optional `avg_speed` interface, while this product correctly
+retains the stable-grasp executor contract from `grasp_stable_pure`, whose
+`move_to_pose()` accepts only the pose and applies its own verified speed and
+filter constants. The repair removes the obsolete parameter from the dynamic
+guard adapter instead of modifying the stable core. A regression test now
+calls `GuardedMotionExecutor.move_to_pose()` through the real stable base class
+and verifies the motion guard plus the stable interpolation settings.
+
+After this repair, the complete `my_course_pkg` functional suite passed 436
+tests and the package rebuilt successfully. A further real banana trial is
+still required to verify close, lift, classified placement, and return home.
