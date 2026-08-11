@@ -7,6 +7,9 @@ import numpy as np
 from my_course_pkg.tasks.tracking.motion_gate import MOVING, STABILIZING
 
 
+PBVS_MOTION_OBSERVATION_S = 10.0
+
+
 class PBVSError(RuntimeError):
     """Raised when a safe PBVS command cannot be produced."""
 

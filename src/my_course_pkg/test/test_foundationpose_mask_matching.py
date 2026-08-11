@@ -15,6 +15,12 @@ MASK_INDEX_ENV = "FOUNDATIONPOSE_MASK_INDEX"
 AUTO_MASK_VERIFY_ENV = "FOUNDATIONPOSE_AUTO_MASK_VERIFY"
 
 
+@pytest.fixture(autouse=True)
+def _configure_small_test_masks(monkeypatch):
+    monkeypatch.setenv("FP_MASK_BORDER_MARGIN_PX", "0")
+    monkeypatch.setenv("FP_MASK_MIN_AREA_PX", "1")
+
+
 def _write_selected(path, target, **extra):
     payload = {
         "candidates": [target],
@@ -130,6 +136,58 @@ def test_load_mask_accepts_sam2_truncated_tomato_soup_label(tmp_path):
     mask = node._load_mask(node._load_target())
 
     np.testing.assert_array_equal(mask, expected_mask.astype(bool))
+
+
+def test_load_mask_rejects_target_mask_touching_image_border(tmp_path):
+    selected_json = tmp_path / "selected.json"
+    sam2_json = tmp_path / "sam2.json"
+    _write_selected(selected_json, "tomato soup can")
+    border_mask = np.zeros((20, 20), dtype=np.uint8)
+    border_mask[12:20, 4:12] = 1
+    _write_sam2_response(
+        sam2_json,
+        [_annotation("tomato soup", border_mask)],
+    )
+
+    node = FoundationPoseEstimationNode(
+        selected_json=selected_json,
+        sam2_response_json=sam2_json,
+        output_dir=tmp_path / "foundationpose",
+        mask_border_margin_px=2,
+        min_mask_area_px=1,
+    )
+
+    with pytest.raises(RuntimeError, match="image border"):
+        node._load_mask(node._load_target())
+
+
+def test_load_mask_skips_border_mask_when_valid_target_mask_exists(tmp_path):
+    selected_json = tmp_path / "selected.json"
+    sam2_json = tmp_path / "sam2.json"
+    _write_selected(selected_json, "tomato soup can")
+    border_mask = np.zeros((20, 20), dtype=np.uint8)
+    border_mask[12:20, 4:12] = 1
+    valid_mask = np.zeros((20, 20), dtype=np.uint8)
+    valid_mask[5:13, 6:14] = 1
+    _write_sam2_response(
+        sam2_json,
+        [
+            _annotation("tomato soup", border_mask, score=0.99),
+            _annotation("tomato soup", valid_mask, score=0.95),
+        ],
+    )
+
+    node = FoundationPoseEstimationNode(
+        selected_json=selected_json,
+        sam2_response_json=sam2_json,
+        output_dir=tmp_path / "foundationpose",
+        mask_border_margin_px=2,
+        min_mask_area_px=1,
+    )
+
+    mask = node._load_mask(node._load_target())
+
+    np.testing.assert_array_equal(mask, valid_mask.astype(bool))
 
 
 def test_load_mask_rejects_no_target_matches_and_writes_metadata(tmp_path):

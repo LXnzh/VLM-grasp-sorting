@@ -936,6 +936,85 @@ def test_vertical_waypoint_z_timeout_holds_and_aborts(monkeypatch):
     )
 
 
+@pytest.mark.parametrize("signed_z_error_m", [-0.0052, 0.0052])
+def test_vertical_waypoint_global_six_mm_gate_accepts_signed_residual(
+    monkeypatch,
+    signed_z_error_m,
+):
+    executor = object.__new__(ArmMotionExecutor)
+    executor.node = DummyNode()
+    executor.arm_api2_client = DummyArmClient()
+    target = np.array([0.0, 0.0, 0.095, 0.0, 0.0, 0.0])
+    actual = target.copy()
+    actual[2] += signed_z_error_m
+    executor.get_current_ee_pose_6d = lambda: actual.copy()
+    monkeypatch.setattr(
+        executor_module,
+        "VERTICAL_DESCENT_XY_TOLERANCE_M",
+        0.002,
+    )
+    monkeypatch.setattr(
+        executor_module,
+        "VERTICAL_APPROACH_Z_TOLERANCE_M",
+        0.006,
+    )
+
+    observed = executor._execute_vertical_approach_waypoint(
+        target,
+        19,
+        20,
+        np.zeros(3),
+    )
+
+    np.testing.assert_allclose(observed, actual)
+    assert len(executor.arm_api2_client.pose_commands) == 1
+
+
+@pytest.mark.parametrize("signed_z_error_m", [-0.0061, 0.0061])
+def test_vertical_waypoint_global_six_mm_gate_rejects_larger_residual(
+    monkeypatch,
+    signed_z_error_m,
+):
+    executor = object.__new__(ArmMotionExecutor)
+    executor.node = DummyNode()
+    executor.arm_api2_client = DummyArmClient()
+    target = np.array([0.0, 0.0, 0.095, 0.0, 0.0, 0.0])
+    actual = target.copy()
+    actual[2] += signed_z_error_m
+    executor.get_current_ee_pose_6d = lambda: actual.copy()
+    monkeypatch.setattr(
+        executor_module,
+        "VERTICAL_DESCENT_XY_TOLERANCE_M",
+        0.002,
+    )
+    monkeypatch.setattr(
+        executor_module,
+        "VERTICAL_APPROACH_Z_TOLERANCE_M",
+        0.006,
+    )
+    monotonic_times = iter([0.0, 1.5])
+    monkeypatch.setattr(
+        "my_course_pkg.grasp.executor.time.monotonic",
+        lambda: next(monotonic_times),
+    )
+
+    with pytest.raises(VerticalApproachConvergenceError) as exc_info:
+        executor._execute_vertical_approach_waypoint(
+            target,
+            19,
+            20,
+            np.zeros(3),
+        )
+
+    assert exc_info.value.z_tolerance_m == pytest.approx(0.006)
+    assert len(executor.arm_api2_client.pose_commands) == 2
+    hold = executor.arm_api2_client.pose_commands[-1]
+    np.testing.assert_allclose(
+        [hold.pose.position.x, hold.pose.position.y, hold.pose.position.z],
+        actual[:3],
+    )
+
+
 def test_vertical_waypoint_offsets_command_but_gates_against_nominal(monkeypatch):
     executor = object.__new__(ArmMotionExecutor)
     executor.node = DummyNode()

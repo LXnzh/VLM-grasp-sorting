@@ -23,6 +23,7 @@ from my_course_pkg.tasks.voice_input import (
 from sim_pick_place.utils.helpers import _pose6d_to_posestamped_msg
 
 from .control import (
+    PBVS_MOTION_OBSERVATION_S,
     PBVSError,
     PositionWindowStabilityGate,
     bounded_camera_pbvs_target,
@@ -47,7 +48,10 @@ class FollowStopPBVSGraspNode(FoundationPoseGraspNode):
             single_instance_reanchor=True,
         )
         self.declare_parameter("pbvs_rate", 10.0)
-        self.declare_parameter("pbvs_motion_observation_s", 3.0)
+        self.declare_parameter(
+            "pbvs_motion_observation_s",
+            PBVS_MOTION_OBSERVATION_S,
+        )
         self.declare_parameter("pbvs_gain", 0.45)
         self.declare_parameter("pbvs_deadband_m", 0.008)
         self.declare_parameter("pbvs_max_step_m", 0.020)

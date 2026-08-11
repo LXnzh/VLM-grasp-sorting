@@ -8,6 +8,7 @@ import pytest
 
 from my_course_pkg.grasp import pick_place_planner as planner
 from my_course_pkg.grasp.config import YCB_GRASP_NAME_MAP
+from my_course_pkg.perception import foundationpose
 from my_course_pkg.perception import llm_sam2
 from my_course_pkg.ycb_models import YCB_DIRECTORY_BY_OBJECT
 from my_course_pkg.tasks.sorting import drop_target as drop_target_module
@@ -32,6 +33,53 @@ def make_drop_target(category="food"):
         depth_path="overview/depth.npy",
         detection_method="random_color_rgbd",
     )
+
+
+def test_direct_mask_foundationpose_reaches_service_boundary(
+    tmp_path,
+    monkeypatch,
+):
+    selected_json = tmp_path / "selected.json"
+    selected_json.write_text(
+        '{"selected_object_name": "banana"}',
+        encoding="utf-8",
+    )
+    mask = np.zeros((20, 20), dtype=bool)
+    mask[5:15, 6:14] = True
+    node = tracking_node._DirectMaskFoundationPose(
+        selected_json=selected_json,
+        output_dir=tmp_path / "foundationpose",
+        target_mask=mask,
+        mask_border_margin_px=2,
+        min_mask_area_px=1,
+    )
+    captured = {}
+
+    def fake_build_bundle(target, loaded_mask):
+        captured["target"] = target
+        captured["mask"] = loaded_mask.copy()
+        return b"bundle"
+
+    class FakeResponse:
+        text = "expected test stop"
+
+        @staticmethod
+        def json():
+            return {"success": False, "error": "expected test stop"}
+
+    monkeypatch.setattr(node, "_build_bundle", fake_build_bundle)
+    monkeypatch.setattr(
+        foundationpose,
+        "_post_with_retries",
+        lambda *_args, **_kwargs: FakeResponse(),
+    )
+
+    result = node.run()
+
+    assert result == {"success": False, "error": "expected test stop"}
+    assert captured["target"] == "banana"
+    np.testing.assert_array_equal(captured["mask"], mask)
+    assert captured["mask"] is not mask
 
 
 @pytest.mark.parametrize("value", ["unknown", "maybe_food", "", None])

@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from my_course_pkg.tasks.pbvs.control import (
+    PBVS_MOTION_OBSERVATION_S,
     PBVSError,
     PositionWindowStabilityGate,
     bounded_camera_pbvs_target,
@@ -26,6 +27,10 @@ from my_course_pkg.tasks.voice_input.live_input import (
     record_browser_instruction,
     transcribe_audio_instruction,
 )
+
+
+def test_pbvs_motion_observation_default_allows_ten_second_drag_window():
+    assert PBVS_MOTION_OBSERVATION_S == 10.0
 
 
 def test_motion_gate_requires_continuous_stationary_window():

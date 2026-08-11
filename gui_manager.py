@@ -12,10 +12,12 @@ output remains available in the built-in task monitor.
 from __future__ import annotations
 
 import os
+import signal
 import shlex
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +27,78 @@ from tkinter import messagebox, scrolledtext, ttk
 
 APP_TITLE = "Robot Grasping Control Console"
 WORKSPACE = Path(__file__).resolve().parent
+KEEP_STILL_GUIDANCE = "KEEP STILL — do not move the selected target."
+TRACKING_READY_GUIDANCE = (
+    "TRACKING READY — 10 seconds: select the target in MuJoCo and "
+    "Ctrl+Shift+right-drag it now."
+)
+PBVS_FOLLOWING_GUIDANCE = (
+    "PBVS FOLLOWING — continue moving, or release the target and keep it still."
+)
+TARGET_STOPPED_GUIDANCE = (
+    "TARGET RELEASED — keep it completely still while the grasp starts."
+)
+FULL_STACK_LAUNCH_MARKER = "cell_small_full_mujoco_moveit.launch.py"
+PROCESS_SHUTDOWN_TIMEOUT_S = 3.0
+
+
+def full_stack_process_ids(proc_root=Path("/proc")) -> tuple[int, ...]:
+    """Return live process IDs whose command line contains the full launch."""
+    marker = FULL_STACK_LAUNCH_MARKER.encode()
+    matches = []
+    try:
+        entries = proc_root.iterdir()
+    except OSError:
+        return ()
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            command = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if marker in command:
+            matches.append(int(entry.name))
+    return tuple(sorted(matches))
+
+
+def terminate_process_groups(processes, timeout_s=PROCESS_SHUTDOWN_TIMEOUT_S):
+    """Terminate and reap each live process and its Linux process group."""
+    live = [process for process in processes if process.poll() is None]
+    errors = []
+    for process in live:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except OSError as exc:
+            errors.append(f"SIGTERM process group {process.pid}: {exc}")
+
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    pending = live
+    while pending and time.monotonic() < deadline:
+        pending = [process for process in pending if process.poll() is None]
+        if pending:
+            time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+
+    for process in pending:
+        if process.poll() is not None:
+            continue
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError as exc:
+            errors.append(f"SIGKILL process group {process.pid}: {exc}")
+
+    reap_deadline = time.monotonic() + 1.0
+    for process in live:
+        remaining = max(0.0, reap_deadline - time.monotonic())
+        try:
+            process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            errors.append(f"Could not reap process group {process.pid}")
+    return errors
 
 
 class ProjectLauncher(tk.Tk):
@@ -46,15 +120,21 @@ class ProjectLauncher(tk.Tk):
         self.task_phase = tk.StringVar(
             value="Waiting: start the food-sorting simulation."
         )
+        self.operator_guidance = tk.StringVar(
+            value="KEEP STILL — start the food-sorting simulation."
+        )
+        self.drag_window_active = False
         self.scene_mode: bool | None = None
         self.voice_capture_active = False
         self.active_processes: dict[int, tuple[str, subprocess.Popen[str]]] = {}
+        self._closing = False
         self._icon = None
 
         self._set_icon()
         self._configure_style()
         self._build_layout()
         self._update_input_mode()
+        self.protocol("WM_DELETE_WINDOW", self.shutdown)
 
     def _set_icon(self) -> None:
         icon_path = WORKSPACE / "gui_icon.png"
@@ -77,6 +157,13 @@ class ProjectLauncher(tk.Tk):
         style.configure("Card.TLabelframe.Label", font=("Arial", 11, "bold"))
         style.configure("Primary.TButton", font=("Arial", 10, "bold"), padding=8)
         style.configure("Action.TButton", font=("Arial", 10), padding=8)
+        style.configure(
+            "Guidance.TLabel",
+            background="#d8f3dc",
+            foreground="#0b3d2e",
+            font=("Arial", 11, "bold"),
+            padding=10,
+        )
 
     def _build_layout(self) -> None:
         content = ttk.Frame(self, padding=16)
@@ -247,7 +334,7 @@ class ProjectLauncher(tk.Tk):
         monitor.grid(row=3, column=0, columnspan=2, sticky="nsew")
         monitor.columnconfigure(1, weight=1)
         monitor.columnconfigure(3, weight=2)
-        monitor.rowconfigure(2, weight=1)
+        monitor.rowconfigure(3, weight=1)
 
         ttk.Label(monitor, text="VLM / Voice API Key:").grid(
             row=0, column=0, sticky="w"
@@ -292,6 +379,20 @@ class ProjectLauncher(tk.Tk):
             text="Clear",
             command=self.clear_log,
         ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Label(
+            monitor,
+            textvariable=self.operator_guidance,
+            style="Guidance.TLabel",
+            anchor="center",
+            justify="center",
+            wraplength=990,
+        ).grid(
+            row=2,
+            column=0,
+            columnspan=4,
+            sticky="ew",
+            pady=(2, 8),
+        )
         self.log = scrolledtext.ScrolledText(
             monitor,
             height=24,
@@ -299,7 +400,7 @@ class ProjectLauncher(tk.Tk):
             wrap=tk.WORD,
             font=("Consolas", 10),
         )
-        self.log.grid(row=2, column=0, columnspan=4, sticky="nsew")
+        self.log.grid(row=3, column=0, columnspan=4, sticky="nsew")
 
         footer = ttk.Label(content, textvariable=self.status, style="Subtitle.TLabel")
         footer.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(12, 0))
@@ -605,6 +706,8 @@ class ProjectLauncher(tk.Tk):
         food_mode: bool,
     ) -> None:
         """Run a ROS command without a desktop terminal and stream its logs."""
+        if self._closing:
+            return
         try:
             process = subprocess.Popen(
                 ["bash", "-lc", command],
@@ -614,6 +717,7 @@ class ProjectLauncher(tk.Tk):
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                start_new_session=True,
             )
         except OSError as exc:
             messagebox.showerror(APP_TITLE, f"Could not start the task: {exc}")
@@ -684,6 +788,18 @@ class ProjectLauncher(tk.Tk):
                 "second simulation or a second Robotiq mock server."
             )
             return
+        external_pids = full_stack_process_ids()
+        if external_pids:
+            pid_text = ", ".join(str(pid) for pid in external_pids)
+            message = (
+                "An existing food-sorting ROS stack is already running outside "
+                f"this GUI (PID: {pid_text}). Stop that stack before starting "
+                "another one."
+            )
+            self.status.set("Existing external food-sorting stack detected.")
+            self._write_log(message)
+            messagebox.showerror(APP_TITLE, message)
+            return
         self.scene_mode = True
         self.launch_terminal(
             "Food-Sorting Simulation",
@@ -692,6 +808,25 @@ class ProjectLauncher(tk.Tk):
             "scene_mode:=random",
             food_mode=True,
         )
+
+    def shutdown(self) -> None:
+        """Close the GUI after terminating every process tree it owns."""
+        if self._closing:
+            return
+        self._closing = True
+        owned_processes = [
+            process
+            for _title, process in list(self.active_processes.values())
+        ]
+        errors = terminate_process_groups(owned_processes)
+        self.active_processes.clear()
+        self.scene_mode = False
+        for error in errors:
+            print(f"GUI shutdown: {error}", file=sys.stderr)
+        try:
+            self.destroy()
+        except tk.TclError:
+            pass
 
     def build_package(self) -> None:
         self.launch_terminal(
@@ -739,41 +874,78 @@ class ProjectLauncher(tk.Tk):
 
     def _update_task_phase(self, message: str) -> None:
         """Translate the ROS/PBVS state machine into operator guidance."""
+        phase = None
+        guidance = None
         if "TASK_FAILED" in message:
             reason = message.split("TASK_FAILED:", 1)[-1].strip()
-            self.task_phase.set(f"Task failed: {reason}")
+            phase = f"Task failed: {reason}"
+            guidance = f"TASK FAILED — {reason}"
+            self.drag_window_active = False
         elif "SAFE_STOP" in message or "PBVS_TRACKING_LOST" in message:
-            self.task_phase.set(
-                "Safe stop / target lost: do not move the robot or target; inspect the log."
-            )
+            phase = "Safe stop / target lost: inspect the log."
+            guidance = "TRACKING LOST — do not move; inspect the log."
+            self.drag_window_active = False
         elif "DONE: returned to initial pose" in message:
-            self.task_phase.set("Task complete: robot is back at its initial pose.")
+            phase = "Task complete: robot is back at its initial pose."
+            guidance = "TASK COMPLETE — robot returned to its initial pose."
+            self.drag_window_active = False
         elif "EXECUTING_GRASP" in message:
-            self.task_phase.set("Grasp executing: do not move the target or robot.")
-        elif "FOUNDATIONPOSE_REQUEST" in message or "PLANNING_FROM_FOUNDATIONPOSE" in message:
-            self.task_phase.set("Pose estimation / planning: keep the target completely still.")
+            phase = "Grasp executing: do not move the target or robot."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
+        elif (
+            "FOUNDATIONPOSE_REQUEST" in message
+            or "PLANNING_FROM_FOUNDATIONPOSE" in message
+        ):
+            phase = "Pose estimation / planning: keep the target still."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "PBVS_RELATIVE_POSE_STABLE" in message:
-            self.task_phase.set("Target stable: keep everything still; grasp planning is starting.")
+            phase = "Target stable: grasp planning is starting."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "PBVS_WAITING_FOR_CONTINUOUS_STOP" in message:
-            self.task_phase.set("Target stopped: keep it still until the grasp begins.")
-        elif "PBVS_MOTION_GATE: state=STABLE" in message:
-            self.task_phase.set("Target stable: do not move it; the safety window is filling.")
+            phase = "Target stopped: keep it still until grasp begins."
+            guidance = TARGET_STOPPED_GUIDANCE
+            self.drag_window_active = False
         elif "PBVS_FOLLOW_ACTIVE" in message or "PBVS_COMMAND" in message:
-            self.task_phase.set("PBVS following: you may move the target; the robot is tracking it.")
-        elif "TARGET_LOCKED" in message:
-            self.task_phase.set("Target locked: you may now move the selected target instance.")
+            phase = "PBVS following: the robot is tracking the target."
+            guidance = PBVS_FOLLOWING_GUIDANCE
+            self.drag_window_active = False
+        elif "TARGET_LOCKED" in message or "PBVS_OBSERVING_FOR_MOTION" in message:
+            phase = "Tracking ready: the 10-second drag window is active."
+            guidance = TRACKING_READY_GUIDANCE
+            self.drag_window_active = True
+        elif "PBVS_MOTION_GATE: state=STABLE" in message:
+            if self.drag_window_active:
+                phase = "Tracking ready: the 10-second drag window is active."
+            else:
+                phase = "Target stable: the safety window is filling."
+                guidance = KEEP_STILL_GUIDANCE
         elif "SORTING_TARGET_READY" in message:
-            self.task_phase.set("Sorting target ready: SAM2 is locking the selected object. Keep it still.")
+            phase = "Sorting target ready: SAM2 is locking it."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "VLM_SELECTION_COMPLETE" in message:
-            self.task_phase.set("Object selected: VLM is classifying food/non-food. Keep it still.")
+            phase = "Object selected: VLM is classifying it."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "VLM_SELECTION_REQUEST" in message:
-            self.task_phase.set("VLM is selecting the instructed object. Keep it still.")
+            phase = "VLM is selecting the instructed object."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "INITIAL_POSE_READY" in message:
-            self.task_phase.set(
-                "Initial pose ready: your instruction was submitted; VLM/SAM2 is selecting the target. Keep the target still until TARGET_LOCKED appears."
-            )
+            phase = "Initial pose ready: VLM/SAM2 is selecting the target."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "RETURNING_TO_INITIAL_POSE" in message:
-            self.task_phase.set("Robot moving to its initial pose: do not move the target yet.")
+            phase = "Robot is returning to its initial pose."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
+        if phase is not None:
+            self.task_phase.set(phase)
+        if guidance is not None:
+            self.operator_guidance.set(guidance)
 
     def clear_log(self) -> None:
         self.log.configure(state=tk.NORMAL)
@@ -791,8 +963,13 @@ class ProjectLauncher(tk.Tk):
 
 
 def main() -> None:
-    app = ProjectLauncher()
-    app.mainloop()
+    app = None
+    try:
+        app = ProjectLauncher()
+        app.mainloop()
+    finally:
+        if app is not None:
+            app.shutdown()
 
 
 if __name__ == "__main__":

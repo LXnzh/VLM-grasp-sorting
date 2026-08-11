@@ -19,6 +19,7 @@ RANDOM_SCENE_CATEGORY_ORDER = (
     "box",
     "tool_top",
 )
+MESH_SPAWN_CLEARANCE_M = 0.0005
 
 
 def remove_elements_by_name(root, body_names_to_remove):
@@ -260,27 +261,34 @@ def _compute_mesh_placement_info(assets, orientation=None):
 
     Each YCB object model defines its own coordinate frame which is usually NOT
     at the object center and NOT aligned with principal geometric axes.  This
-    function reads the visual OBJ mesh, applies the desired orientation, then
-    returns:
-      - z_min:   minimum Z of the rotated mesh (bottom of the object in world)
-      - centroid_x / centroid_y: geometric centre of the rotated mesh in XY
+    function reads the visual and collision OBJ meshes, applies the desired
+    orientation, then returns:
+      - collision_z_min: minimum Z across every rotated collision mesh
+      - centroid_x / centroid_y: visual-mesh centre in rotated XY
 
     The caller uses these to centre the object on a grid position and to place
-    its bottom exactly on the table surface regardless of the coordinate frame.
+    the collision bottom just above the table regardless of the coordinate
+    frame.  Visual XY remains unchanged because that defines the operator-facing
+    scene layout.
     """
     if orientation is None:
         orientation = [0.0, 0.0, 0.0]
 
-    verts = load_obj_vertices(assets.visual_mesh)
+    visual_verts = load_obj_vertices(assets.visual_mesh)
+    collision_verts = np.concatenate(
+        [load_obj_vertices(path) for path in assets.collision_meshes],
+        axis=0,
+    )
 
     if np.any(np.array(orientation) != 0):
         R = _euler_to_rotation_matrix(orientation)
-        verts = (R @ verts.T).T
+        visual_verts = (R @ visual_verts.T).T
+        collision_verts = (R @ collision_verts.T).T
 
     return {
-        'z_min': float(verts[:, 2].min()),
-        'centroid_x': float(verts[:, 0].mean()),
-        'centroid_y': float(verts[:, 1].mean()),
+        'collision_z_min': float(collision_verts[:, 2].min()),
+        'centroid_x': float(visual_verts[:, 0].mean()),
+        'centroid_y': float(visual_verts[:, 1].mean()),
     }
 
 
@@ -724,7 +732,12 @@ def populate_scene(model_path, objects_config=None, camera_names=[],
 
                 body_x = xy[0] - placement['centroid_x']
                 body_y = xy[1] - placement['centroid_y']
-                body_z = table_surface_z - placement['z_min'] + z_sample
+                body_z = (
+                    table_surface_z
+                    - placement['collision_z_min']
+                    + MESH_SPAWN_CLEARANCE_M
+                    + z_sample
+                )
                 pos = [body_x, body_y, body_z]
 
                 ycb_root = build_ycb_object_xml(obj_config['name'], assets)
@@ -756,7 +769,8 @@ def populate_scene(model_path, objects_config=None, camera_names=[],
                 worldbody.append(obj_body)
             if obj_config.get('type') == 'mesh':
                 print(f"[INFO] Added {obj_config['name']} (mesh) to scene at [{pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}] "
-                      f"(z_min={placement['z_min']:.3f}, centroid_xy=[{placement['centroid_x']:.3f}, {placement['centroid_y']:.3f}])")
+                      f"(collision_z_min={placement['collision_z_min']:.3f}, "
+                      f"centroid_xy=[{placement['centroid_x']:.3f}, {placement['centroid_y']:.3f}])")
             else:
                 print(f"[INFO] Added {obj_config['name']} ({obj_config['type']}) to scene at [{pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f}]")
 

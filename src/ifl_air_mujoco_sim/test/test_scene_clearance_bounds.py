@@ -1,6 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
+import xml.etree.ElementTree as ET
 
+import mujoco
 import numpy as np
 import pytest
 import yaml
@@ -103,17 +105,35 @@ def test_load_obj_vertices_rejects_missing_file(tmp_path):
 
 
 def test_mesh_placement_info_preserves_raw_vertex_orientation_semantics(tmp_path):
-    vertices = np.array(
+    visual_vertices = np.array(
         [[1.0, 0.0, -1.0], [3.0, 2.0, 1.0], [2.0, -1.0, 0.0]],
+        dtype=float,
+    )
+    collision_vertices_0 = np.array(
+        [[-2.0, 0.0, -3.0], [0.0, 1.0, 0.5], [1.0, -2.0, 1.0]],
+        dtype=float,
+    )
+    collision_vertices_1 = np.array(
+        [[0.0, 2.0, -2.0], [2.0, 0.0, 2.0], [-1.0, -1.0, 0.0]],
         dtype=float,
     )
     ycb_dir = _write_ycb_dir(
         tmp_path,
-        vertices,
-        {"textured_vhacd_collision_0.obj": vertices},
+        visual_vertices,
+        {
+            "textured_vhacd_collision_0.obj": collision_vertices_0,
+            "textured_vhacd_collision_1.obj": collision_vertices_1,
+        },
     )
-    orientation = [0.0, 0.0, np.pi / 2.0]
-    rotated = (_rotation_xyz(*orientation) @ vertices.T).T
+    orientation = [0.35, -0.2, np.pi / 3.0]
+    rotation = _rotation_xyz(*orientation)
+    rotated_visual = (rotation @ visual_vertices.T).T
+    rotated_collision = np.concatenate(
+        [
+            (rotation @ collision_vertices_0.T).T,
+            (rotation @ collision_vertices_1.T).T,
+        ]
+    )
     assets = resolve_ycb_assets("widget", ycb_dir)
 
     placement = populate_scene._compute_mesh_placement_info(
@@ -121,9 +141,11 @@ def test_mesh_placement_info_preserves_raw_vertex_orientation_semantics(tmp_path
         orientation=orientation,
     )
 
-    assert placement["z_min"] == pytest.approx(rotated[:, 2].min())
-    assert placement["centroid_x"] == pytest.approx(rotated[:, 0].mean())
-    assert placement["centroid_y"] == pytest.approx(rotated[:, 1].mean())
+    assert placement["collision_z_min"] == pytest.approx(
+        rotated_collision[:, 2].min()
+    )
+    assert placement["centroid_x"] == pytest.approx(rotated_visual[:, 0].mean())
+    assert placement["centroid_y"] == pytest.approx(rotated_visual[:, 1].mean())
 
 
 def test_mesh_cache_unions_visual_and_collision_geometries(tmp_path):
@@ -312,6 +334,72 @@ def test_real_hammer_bound_center_is_offset_from_body_origin():
     bound = compute_world_aabb(cache, np.zeros(3), np.eye(3))
 
     assert np.linalg.norm(bound.center) > 0.02
+
+
+def _real_hammer_spawn_root():
+    config = _real_ycb_config("hammer")
+    assets = resolve_ycb_assets(config["name"], config["ycb_dir"])
+    orientation = config.get("orientation", [0.0, 0.0, 0.0])
+    placement = populate_scene._compute_mesh_placement_info(
+        assets,
+        orientation=orientation,
+    )
+    body_z = (
+        -placement["collision_z_min"]
+        + populate_scene.MESH_SPAWN_CLEARANCE_M
+    )
+    root = populate_scene.build_ycb_object_xml("hammer", assets)
+    body = root.find("./worldbody/body[@name='hammer']")
+    body.set("pos", f"0 0 {body_z}")
+    body.set("euler", " ".join(str(value) for value in orientation))
+    ET.SubElement(
+        root.find("worldbody"),
+        "geom",
+        name="table",
+        type="plane",
+        pos="0 0 0",
+        size="1 1 0.1",
+        friction="0.9 0.2 0.05",
+    )
+    ET.SubElement(root, "option", timestep="0.002", gravity="0 0 -9.81")
+    return root, body_z, placement
+
+
+def test_real_hammer_collision_bottom_spawns_with_half_millimetre_clearance():
+    _, body_z, placement = _real_hammer_spawn_root()
+
+    collision_bottom = body_z + placement["collision_z_min"]
+
+    assert collision_bottom == pytest.approx(
+        populate_scene.MESH_SPAWN_CLEARANCE_M,
+        abs=1e-12,
+    )
+
+
+def test_real_hammer_settles_without_launching_from_table():
+    root, _, _ = _real_hammer_spawn_root()
+    model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode"))
+    data = mujoco.MjData(model)
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "hammer")
+    mujoco.mj_forward(model, data)
+    initial_position = data.xpos[body_id].copy()
+    max_upward_displacement = 0.0
+    max_horizontal_displacement = 0.0
+
+    for _ in range(500):
+        mujoco.mj_step(model, data)
+        displacement = data.xpos[body_id] - initial_position
+        max_upward_displacement = max(
+            max_upward_displacement,
+            float(displacement[2]),
+        )
+        max_horizontal_displacement = max(
+            max_horizontal_displacement,
+            float(np.linalg.norm(displacement[:2])),
+        )
+
+    assert max_upward_displacement <= 0.005
+    assert max_horizontal_displacement <= 0.005
 
 
 def _make_interface_with_geometry_entries(entries):

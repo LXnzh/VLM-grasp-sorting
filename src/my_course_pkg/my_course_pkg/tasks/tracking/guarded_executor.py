@@ -32,9 +32,9 @@ class GuardedMotionExecutor(ArmMotionExecutor):
                 require_stable=require_stable,
             )
 
-    def move_to_pose(self, pose_msg, avg_speed=None):
+    def move_to_pose(self, pose_msg):
         self._check_target()
-        return super().move_to_pose(pose_msg, avg_speed=avg_speed)
+        return super().move_to_pose(pose_msg)
 
     def move_with_moveit(self, target_pose_6d):
         self._check_target()

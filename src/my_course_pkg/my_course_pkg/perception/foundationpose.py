@@ -231,6 +231,8 @@ class FoundationPoseEstimationNode:
         mesh_root: Path | str = MESH_ROOT,
         fp_url: str = FP_URL,
         output_dir: Path | str = FP_OUTPUT_DIR,
+        mask_border_margin_px: int | None = None,
+        min_mask_area_px: int | None = None,
         mask_candidate_verifier=None,
     ):
         self.selected_json = Path(selected_json)
@@ -240,6 +242,16 @@ class FoundationPoseEstimationNode:
         self.mesh_root = Path(mesh_root)
         self.fp_url = fp_url.rstrip("/")
         self.output_dir = Path(output_dir)
+        self.mask_border_margin_px = (
+            int(os.environ.get("FP_MASK_BORDER_MARGIN_PX", "5"))
+            if mask_border_margin_px is None
+            else int(mask_border_margin_px)
+        )
+        self.min_mask_area_px = (
+            int(os.environ.get("FP_MASK_MIN_AREA_PX", "200"))
+            if min_mask_area_px is None
+            else int(min_mask_area_px)
+        )
         self.mask_candidate_verifier = mask_candidate_verifier
 
     @property
@@ -385,6 +397,40 @@ class FoundationPoseEstimationNode:
                 }
             )
         return candidates
+
+    def _validate_mask_geometry(self, mask: np.ndarray, target: str) -> None:
+        area = int(mask.sum())
+        if area < self.min_mask_area_px:
+            raise RuntimeError(
+                f"SAM2 mask for {target!r} is too small: "
+                f"area={area}px, minimum={self.min_mask_area_px}px."
+            )
+
+        ys, xs = np.where(mask)
+        if len(xs) == 0:
+            raise RuntimeError(f"SAM2 mask for {target!r} is empty.")
+
+        height, width = mask.shape
+        margin = max(0, int(self.mask_border_margin_px))
+        touches_border = (
+            int(xs.min()) < margin
+            or int(ys.min()) < margin
+            or int(xs.max()) >= width - margin
+            or int(ys.max()) >= height - margin
+        )
+        if touches_border:
+            bbox = (
+                int(xs.min()),
+                int(ys.min()),
+                int(xs.max()),
+                int(ys.max()),
+            )
+            raise RuntimeError(
+                f"SAM2 mask for {target!r} is too close to the image border: "
+                f"bbox_xyxy={bbox}, image_size=({width}, {height}), "
+                f"margin={margin}px. Move the object/camera so the full object "
+                "is visible before estimating 6D pose."
+            )
 
     def _write_mask_candidates(self, target: str, candidates: list[dict]) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -770,14 +816,26 @@ Rules:
             visual_target_description,
         ) = self._load_alias_mask_options()
         sam2 = json.loads(self.sam2_response_json.read_text(encoding="utf-8"))
-        candidates = self._matching_mask_candidates(
+        decoded_candidates = self._matching_mask_candidates(
             sam2,
             target,
             accepted_sam2_class_names=accepted_sam2_class_names,
         )
+        candidates = []
+        geometry_errors = []
+        for candidate in decoded_candidates:
+            try:
+                self._validate_mask_geometry(candidate["mask"], target)
+            except RuntimeError as exc:
+                geometry_errors.append(str(exc))
+                continue
+            candidate["metadata"]["index"] = len(candidates) + 1
+            candidates.append(candidate)
         self._write_mask_candidates(target, candidates)
 
         if not candidates:
+            if geometry_errors:
+                raise RuntimeError(" ".join(geometry_errors))
             raise RuntimeError(
                 f"SAM2 did not detect the target object: {target}. "
                 f"Candidate metadata: {self.mask_candidates_path}"
