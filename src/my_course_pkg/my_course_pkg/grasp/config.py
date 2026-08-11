@@ -207,7 +207,7 @@ def read_vertical_descent_xy_tolerance_m():
 def read_vertical_approach_z_tolerance_m():
     return _read_positive_finite_float(
         "GRASP_VERTICAL_APPROACH_Z_TOLERANCE_M",
-        "0.003",
+        "0.006",
     )
 
 

@@ -276,7 +276,7 @@ def test_vertical_approach_feedback_gate_defaults(monkeypatch):
     )
     assert (
         grasp_config_module.read_vertical_approach_z_tolerance_m()
-        == pytest.approx(0.003)
+        == pytest.approx(0.006)
     )
     assert (
         grasp_config_module.read_vertical_approach_waypoint_max_dist_m()

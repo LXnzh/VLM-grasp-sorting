@@ -247,3 +247,35 @@ MuJoCo process had already exited. Do not start another scene from a second
 GUI. When the API key can be re-entered, terminate that old GUI process group,
 start `python3 gui_manager.py` again, and use the new GUI for final close-path
 runtime acceptance.
+
+## 2026-08-12 global vertical Z tolerance
+
+A moved `gelatin_box` trial completed VLM selection, PBVS tracking,
+FoundationPose, planning, pregrasp calibration, and the first 18 of 20 vertical
+descent waypoints. Waypoint 19 stopped before gripper close with 0.3 mm XY
+error and a +5.2 mm Z residual because the global vertical Z tolerance was
+3 mm. The MuJoCo view showed both open fingertips already straddling the box.
+
+The user explicitly selected the smallest configuration change and accepted
+that the executor will still command waypoint 20 rather than close early at
+waypoint 19. The default `GRASP_VERTICAL_APPROACH_Z_TOLERANCE_M` is now 6 mm.
+This is the existing global symmetric vertical tolerance, so it applies to
+pregrasp, every descent waypoint, and ordinary final verification in both Z
+directions. XY gates, waypoint spacing, timeout, bounds logic, commands,
+gripper behavior, and non-vertical profiles are unchanged.
+
+Verification in the project container:
+
+- focused configuration and guarded-executor tests: 168 passed;
+- complete `my_course_pkg` functional suite: 454 passed with the three legacy
+  ament linter wrappers excluded;
+- positive and negative 5.2 mm waypoint residuals pass, while positive and
+  negative 6.1 mm residuals hold and fail;
+- changed-file `compileall`, fatal Flake8, and `git diff --check` passed;
+- `colcon build --symlink-install --packages-select my_course_pkg` passed;
+- the installed runtime reports the default vertical Z tolerance as `0.006`.
+
+No robot motion was launched automatically. The next `gelatin_box` trial
+should show waypoint 19 passing at +5.2 mm, followed by the unchanged final
+waypoint and final verification. A later residual above 6 mm must still hold
+and abort.
