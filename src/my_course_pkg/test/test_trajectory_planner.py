@@ -316,6 +316,8 @@ def test_vertical_approach_feedback_gate_rejects_invalid_values(
 
     with pytest.raises(ValueError, match=environment_name):
         getattr(grasp_config_module, reader_name)()
+
+
 def test_vertical_reanchor_calibration_defaults(monkeypatch):
     for name in (
         "GRASP_VERTICAL_REANCHOR_MAX_OFFSET_M",

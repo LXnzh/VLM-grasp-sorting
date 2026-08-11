@@ -68,8 +68,8 @@ FoundationPose pose + grasps 候选姿态
 
 ```text
 005_tomato_soup_can
-007_tuna_fish_can
-008_pudding_box
+009_gelatin_box
+013_apple
 ...
 015_peach
 ...
@@ -397,7 +397,7 @@ FoundationPose 得到 T_camera_object
 
 ```text
 tomato soup can
-tuna fish can
+gelatin box
 peach
 rubiks cube
 ```
@@ -406,7 +406,7 @@ YCB grasp 目录用编号：
 
 ```text
 005_tomato_soup_can
-007_tuna_fish_can
+009_gelatin_box
 015_peach
 077_rubiks_cube
 ```
@@ -415,7 +415,7 @@ YCB grasp 目录用编号：
 
 ```text
 tomato soup can -> 005_tomato_soup_can
-tuna fish can   -> 007_tuna_fish_can
+gelatin box     -> 009_gelatin_box
 peach           -> 015_peach
 rubiks cube     -> 077_rubiks_cube
 ```

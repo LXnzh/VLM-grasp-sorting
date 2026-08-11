@@ -17,6 +17,7 @@ from env.utils.scene_clearance_bounds import (
     build_object_geometry_cache,
     compute_world_aabb,
 )
+from env.utils.sorting_scene import validate_sorting_camera_visibility
 
 class MuJoCoInterface:
     def __init__(self,
@@ -32,6 +33,8 @@ class MuJoCoInterface:
                 scene_object_categories=None,
                 assigned_object_names=None,
                 placement_slots=None,
+                classification_bins=None,
+                camera_size=(1280, 720),
                 minimal_viewer=False, # if true, hides extra UI elements and visual overlays for a cleaner view (good for recording videos)
                 viewer_sync_fps=60):
 
@@ -47,6 +50,13 @@ class MuJoCoInterface:
         )
         self.assigned_object_names = assigned_object_names or []
         self.placement_slots = placement_slots or []
+        self.classification_bins = classification_bins
+        self.camera_names = list(camera_names or ['cam0'])
+        self.camera_size = tuple(int(value) for value in camera_size)
+        if len(self.camera_size) != 2 or min(self.camera_size) <= 0:
+            raise ValueError(
+                "camera_size must be [positive_width, positive_height]."
+            )
         self._renderer_width = None
         self._renderer_height = None
 
@@ -78,15 +88,22 @@ class MuJoCoInterface:
             print(f"[INFO] Randomly selected {len(self.objects_config)} objects from pool")
 
         print("[INFO] STARTING MUJOCO SCENE NOW")
-        populated_scene = populate_scene(model_path, objects_config=self.objects_config, camera_names=camera_names)
+        populated_scene = populate_scene(
+            model_path,
+            objects_config=self.objects_config,
+            camera_names=self.camera_names,
+            classification_bins=self.classification_bins,
+        )
         self.model = mujoco.MjModel.from_xml_string(populated_scene)
         self.data = mujoco.MjData(self.model)
         self._initialize_scene_clearance_geometry_cache()
 
         self.ctr_timestep = control_timestep  # In seconds (e.g., 0.01 = 100Hz)
-        if camera_names is None or len(camera_names) == 0:
-            camera_names = ['cam0']
-        self.default_cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, camera_names[0])
+        self.default_cam_id = mujoco.mj_name2id(
+            self.model,
+            mujoco.mjtObj.mjOBJ_CAMERA,
+            self.camera_names[0],
+        )
         
         self.viewer = None
         self._viewer_sync_fps = max(1, int(viewer_sync_fps))
@@ -120,7 +137,7 @@ class MuJoCoInterface:
         self._prev_render_time = time.perf_counter()
         
         self._camera_id_cache = {}
-        for cam_name in camera_names:
+        for cam_name in self.camera_names:
             cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, cam_name)
             if cam_id != -1:
                 self._camera_id_cache[cam_name] = cam_id
@@ -149,6 +166,21 @@ class MuJoCoInterface:
         #self.ctrl0 = [0.0, -1.5708, 1.5708, -1.5708, -1.5708, 0, 0]
         self.ctrl0 = [-0.2345, -1.0715, -1.8688, -1.5812, 1.6339, 2.8947, 0]
         self.reset(qpos=self.q0, qvel=self.vel0, ctrl=self.ctrl0)
+        if self.classification_bins and self.classification_bins.get(
+            'enabled', False
+        ):
+            if 'camera_orbbec' not in self.camera_names:
+                raise ValueError(
+                    "Sorting mode requires camera_orbbec as overview camera."
+                )
+            validate_sorting_camera_visibility(
+                self.model,
+                self.data,
+                'camera_orbbec',
+                self.objects_config,
+                self.classification_bins,
+                image_size=self.camera_size,
+            )
 
     def _sync_viewer_if_needed(self, force=False, state_only=True):
         if self.viewer is None or not self.viewer.is_running():

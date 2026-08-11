@@ -32,7 +32,9 @@ from my_course_pkg.perception.llm_sam2 import (
     _get_vlm_client,
     _is_image_unsupported_error,
     _parse_json_object,
-    _short_response_text as _short_vlm_response_text,
+)
+from my_course_pkg.perception.http import (
+    short_response_text as _short_vlm_response_text,
 )
 from my_course_pkg.ycb_models import (
     NAME2MESH as NUMBERED_NAME2MESH,
@@ -54,7 +56,10 @@ K = np.array(
 SELECTED_OBJ_JSON = SELECTED_OBJECT_JSON
 FP_OUTPUT_DIR = FOUNDATIONPOSE_OUTPUT_DIR
 MESH_ROOT = Path("/home/ws/src/my_course_pkg/YCB_Dataset/ycb")
-FP_URL = "http://172.22.222.220:5001"
+FP_URL = os.environ.get(
+    "FOUNDATIONPOSE_URL",
+    "http://172.22.222.220:5001",
+)
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 MASK_INDEX_ENV = "FOUNDATIONPOSE_MASK_INDEX"
 AUTO_MASK_VERIFY_ENV = "FOUNDATIONPOSE_AUTO_MASK_VERIFY"
@@ -65,7 +70,6 @@ NAME2MESH = NUMBERED_NAME2MESH
 
 SAM2_CLASS_ALIASES = {
     "tomato soup can": {"tomato soup"},
-    "tuna fish can": {"tuna fish"},
 }
 
 
@@ -205,7 +209,7 @@ def _target_visual_hint(
             f"The target is {visual_target_description}. Prefer candidates that "
             "match this description and reject visually conflicting objects."
         )
-    if target in {"tomato soup can", "tuna fish can"}:
+    if target == "tomato soup can":
         return (
             "The target is a metal food can. In the robot's top-down view it may "
             "appear mainly as a gray or silver circular metal lid or bottom, and "

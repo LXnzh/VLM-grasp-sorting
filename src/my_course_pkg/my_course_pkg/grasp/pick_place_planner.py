@@ -1,24 +1,14 @@
 from dataclasses import dataclass
-import hashlib
-import os
-from pathlib import Path
 import re
 import threading
-import time
 
 import numpy as np
 import tf_transformations
-from sim_pick_place.utils.helpers import _transform_matrix_to_pose6d
 
 from my_course_pkg.grasp.config import (
     CAMERA_FRAME,
     FOUNDATIONPOSE_OBJECT_CAMERA_POSE_JSON,
     GRASP_EXECUTION_MODE,
-    GRASP_DEBUG_STOP_AFTER_CLOSE,
-    GRASP_DEBUG_STOP_AFTER_LIFT,
-    GRASP_DEBUG_STOP_AT_GRASP,
-    GRASP_DEBUG_STOP_AT_PREGRASP,
-    GRASP_DEBUG_STOP_BEFORE_RELEASE,
     GRASP_LIFT_HEIGHT,
     GRASP_PLACE_BASE_EXCLUSION_ENABLED,
     GRASP_PLACE_BASE_EXCLUSION_X_MAX,
@@ -51,12 +41,8 @@ from my_course_pkg.grasp.config import (
     SIDE_GRASP_APPROACH_VERTICAL_MARGIN_M,
     SIDE_GRASP_CLEARANCE_ENABLED,
     SIDE_GRASP_MIN_WORLD_Z_ABOVE_OBJECT_M,
-    GRIPPER_OPEN_POSITION,
     VERTICAL_MIN_TCP_ABOVE_TARGET_BOTTOM_M,
-    read_tuna_config,
 )
-from my_course_pkg.grasp.tuna_calibration import load_tuna_gripper_calibration
-from my_course_pkg.grasp.tuna_errors import TunaErrorCode, TunaGraspError
 from my_course_pkg.grasp.grasp_selector import (
     get_grasp_profile,
     get_grasp_z_offset,
@@ -67,22 +53,8 @@ from my_course_pkg.grasp.grasp_selector import (
 )
 from my_course_pkg.grasp.trajectory_planner import (
     PickPlacePlan,
-    build_tuna_preclamp_plan,
     build_drop_pose_6d,
     plan_safe_pick_place_steps,
-)
-from my_course_pkg.grasp.tuna_roll_grasp import (
-    FrozenPivotContract,
-    TunaBoundsSample,
-    build_contact_support_pose,
-    build_pregrasp_pose,
-    evaluate_initial_straddle,
-    generate_radial_directions,
-    generate_roll_waypoints,
-    interpolate_gripper_geometry,
-    required_width,
-    support_hull_clearance_lower_bound,
-    validate_tuna_bounds_samples,
 )
 from my_course_pkg.grasp.transforms import (
     assert_valid_rotation,
@@ -95,6 +67,7 @@ from my_course_pkg.grasp.transforms import (
     print_pose_summary,
     should_canonicalize_tabletop_object_pose,
 )
+from my_course_pkg.tasks.sorting.drop_target import DropTarget
 
 
 CLEARANCE_NUMERIC_EPSILON_M = 1e-9
@@ -110,26 +83,6 @@ class PickPlacePlanningResult:
     grasp_pose_6d: np.ndarray
     candidate_index: int = 0
     candidate_count: int = 1
-
-
-@dataclass(frozen=True)
-class TunaPlanningCandidate:
-    radial_index: int
-    radial_direction: np.ndarray
-    contact_height_m: float
-    pitch_deg: float
-    T_world_tcp_contact: np.ndarray
-    T_world_tcp_pregrasp: np.ndarray
-    clearance_lower_bound_m: float
-    reachability_score: float
-
-
-@dataclass(frozen=True)
-class TunaPerceptionProvenance:
-    cache_invalidation_verified: bool
-    invalidated_wall_time: float | None
-    scene_reset_wall_time: float | None
-    files: tuple[dict, ...]
 
 
 @dataclass(frozen=True)
@@ -181,290 +134,6 @@ def _warn(node, message):
         node.get_logger().warn(message)
     else:
         print(f"[WARN] {message}")
-
-
-def _normalize_tuna_object_name(value):
-    """Normalize spelling only; deliberately do not strip dataset prefixes."""
-    key = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-    return re.sub(r"_+", "_", key)
-
-
-def _legacy_debug_flags_enabled():
-    return tuple(
-        name
-        for name, enabled in (
-            ("GRASP_DEBUG_STOP_AT_PREGRASP", GRASP_DEBUG_STOP_AT_PREGRASP),
-            ("GRASP_DEBUG_STOP_AT_GRASP", GRASP_DEBUG_STOP_AT_GRASP),
-            ("GRASP_DEBUG_STOP_AFTER_CLOSE", GRASP_DEBUG_STOP_AFTER_CLOSE),
-            ("GRASP_DEBUG_STOP_AFTER_LIFT", GRASP_DEBUG_STOP_AFTER_LIFT),
-            ("GRASP_DEBUG_STOP_BEFORE_RELEASE", GRASP_DEBUG_STOP_BEFORE_RELEASE),
-        )
-        if enabled
-    )
-
-
-def _file_provenance(path):
-    candidate = Path(path).expanduser()
-    if not candidate.is_file():
-        return {
-            "path": str(candidate),
-            "exists": False,
-            "mtime_wall_time": None,
-            "sha256": None,
-        }
-    payload = candidate.read_bytes()
-    return {
-        "path": str(candidate.resolve()),
-        "exists": True,
-        "mtime_wall_time": float(candidate.stat().st_mtime),
-        "sha256": hashlib.sha256(payload).hexdigest(),
-    }
-
-
-def _validate_tuna_perception_cache(
-    node,
-    *,
-    selected_object_path,
-    object_cam_pose_path,
-    require_fresh_scene,
-):
-    invalidated = getattr(node, "tuna_perception_cache_invalidated_wall_time", None)
-    reset = getattr(node, "tuna_scene_reset_wall_time", None)
-    invalidated = None if invalidated is None else float(invalidated)
-    reset = None if reset is None else float(reset)
-    if invalidated is not None and not np.isfinite(invalidated):
-        invalidated = None
-    if reset is not None and not np.isfinite(reset):
-        reset = None
-    files = tuple(
-        _file_provenance(path)
-        for path in (selected_object_path, object_cam_pose_path)
-    )
-    verified = bool(
-        invalidated is not None
-        and reset is not None
-        and invalidated >= reset
-        and all(
-            item["exists"]
-            and item["mtime_wall_time"] is not None
-            and item["mtime_wall_time"] > invalidated
-            for item in files
-        )
-    )
-    if require_fresh_scene and not verified:
-        raise TunaGraspError(
-            TunaErrorCode.BOUNDS,
-            "perception_cache",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "fresh_scene_cache_invalidation_unverified",
-                "has_invalidation_boundary": invalidated is not None,
-                "has_scene_reset_boundary": reset is not None,
-                "files_exist": [bool(item["exists"]) for item in files],
-            },
-        )
-    return TunaPerceptionProvenance(
-        cache_invalidation_verified=verified,
-        invalidated_wall_time=invalidated,
-        scene_reset_wall_time=reset,
-        files=files,
-    )
-
-
-def _stamp_seconds(stamp):
-    if stamp is None:
-        raise ValueError("Tuna bounds marker has no source timestamp.")
-    value = float(getattr(stamp, "sec", 0)) + 1e-9 * float(
-        getattr(stamp, "nanosec", 0)
-    )
-    if not np.isfinite(value):
-        raise ValueError("Tuna bounds marker source timestamp is non-finite.")
-    return value
-
-
-def _tuna_bounds_sample_from_marker(marker, received_monotonic):
-    if _normalize_tuna_object_name(_marker_obstacle_name(marker)) != "tuna_fish_can":
-        raise ValueError("Tuna bounds marker identity is not exact tuna_fish_can.")
-    if _marker_frame_id(marker) != "world":
-        raise ValueError("Tuna bounds marker must already be in the world frame.")
-    transform = _marker_pose_transform(marker)
-    if not _bounds_z_axis_is_world_aligned(transform):
-        raise ValueError("Tuna bounds marker may contain yaw but not roll or pitch.")
-    scale = np.array(
-        [float(marker.scale.x), float(marker.scale.y), float(marker.scale.z)],
-        dtype=float,
-    )
-    return TunaBoundsSample(
-        object_name="tuna_fish_can",
-        frame_id="world",
-        source_timestamp=_stamp_seconds(getattr(marker.header, "stamp", None)),
-        received_monotonic=float(received_monotonic),
-        center=transform[:3, 3],
-        size=scale,
-    )
-
-
-def _collect_tuna_bounds_samples(node, required_count, reception_boundary):
-    collector = getattr(node, "collect_tuna_bounds_samples", None)
-    if callable(collector):
-        return tuple(
-            collector(
-                required_count=int(required_count),
-                reception_boundary=float(reception_boundary),
-            )
-        )
-    if not hasattr(node, "create_subscription"):
-        raise TunaGraspError(
-            TunaErrorCode.BOUNDS,
-            "initial_bounds",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "bounds_collector_unavailable",
-            },
-        )
-    try:
-        from visualization_msgs.msg import MarkerArray
-    except Exception as exc:
-        raise TunaGraspError(
-            TunaErrorCode.BOUNDS,
-            "initial_bounds",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "marker_array_import",
-            },
-        ) from exc
-
-    samples = []
-    callback_errors = []
-    ready = threading.Event()
-
-    def _callback(message):
-        received = time.monotonic()
-        if received <= reception_boundary:
-            return
-        exact = [
-            marker
-            for marker in getattr(message, "markers", ())
-            if _normalize_tuna_object_name(_marker_obstacle_name(marker))
-            == "tuna_fish_can"
-        ]
-        if len(exact) != 1:
-            callback_errors.append(f"exact_marker_count:{len(exact)}")
-            return
-        try:
-            sample = _tuna_bounds_sample_from_marker(exact[0], received)
-        except (TypeError, ValueError, RuntimeError) as exc:
-            callback_errors.append(type(exc).__name__)
-            return
-        if samples and sample.source_timestamp <= samples[-1].source_timestamp:
-            return
-        samples.append(sample)
-        if len(samples) >= required_count:
-            ready.set()
-
-    callback_group = getattr(node, "cbg", None)
-    try:
-        subscription = node.create_subscription(
-            MarkerArray,
-            GRASP_SCENE_CLEARANCE_TOPIC,
-            _callback,
-            10,
-            callback_group=callback_group,
-        )
-    except TypeError:
-        subscription = node.create_subscription(
-            MarkerArray,
-            GRASP_SCENE_CLEARANCE_TOPIC,
-            _callback,
-            10,
-        )
-    try:
-        ready.wait(GRASP_SCENE_DESCRIPTION_TIMEOUT_SEC)
-    finally:
-        if hasattr(node, "destroy_subscription"):
-            node.destroy_subscription(subscription)
-    if len(samples) != required_count:
-        raise TunaGraspError(
-            TunaErrorCode.BOUNDS,
-            "initial_bounds",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "three_fresh_samples_not_received",
-                "received_count": len(samples),
-                "callback_errors": callback_errors[:5],
-            },
-        )
-    return tuple(samples)
-
-
-def _tuna_table_z(node):
-    getter = getattr(node, "get_tuna_table_z_m", None)
-    value = getter() if callable(getter) else getattr(node, "tuna_table_z_m", None)
-    if value is None and hasattr(node, "create_client"):
-        from my_course_pkg.grasp.tuna_planning_scene import (
-            read_tuna_table_z_from_moveit,
-        )
-
-        value = read_tuna_table_z_from_moveit(node)
-    if value is None or not np.isfinite(float(value)):
-        raise TunaGraspError(
-            TunaErrorCode.BOUNDS,
-            "planning_scene_table",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "planning_scene_table_z_unavailable",
-            },
-        )
-    return float(value)
-
-
-def _default_tuna_calibration_sources():
-    root = Path(__file__).resolve().parents[4]
-    mesh_root = (
-        root
-        / "src"
-        / "ros2_robotiq_gripper"
-        / "robotiq_description"
-        / "meshes"
-        / "collision"
-        / "2f_85"
-    )
-    names = {
-        "robotiq_85_base_link": "robotiq_base.stl",
-        "robotiq_85_left_finger_link": "left_finger.stl",
-        "robotiq_85_left_finger_tip_link": "left_finger_tip_160_collision.stl",
-        "robotiq_85_left_inner_knuckle_link": "left_inner_knuckle.stl",
-        "robotiq_85_left_knuckle_link": "left_knuckle.stl",
-        "robotiq_85_right_finger_link": "right_finger.stl",
-        "robotiq_85_right_finger_tip_link": "right_finger_tip_160_collision.stl",
-        "robotiq_85_right_inner_knuckle_link": "right_inner_knuckle.stl",
-        "robotiq_85_right_knuckle_link": "right_knuckle.stl",
-    }
-    return {
-        "urdf_path": root
-        / "src"
-        / "ifl_air_cell_small_ur_orbbec_robotiq_moveit_config"
-        / "urdf"
-        / "cell_small_ur_orbbec_robotiq2f85.urdf",
-        "collision_mesh_paths": {
-            link_name: mesh_root / filename for link_name, filename in names.items()
-        },
-        "mount_transforms_path": root
-        / "src"
-        / "my_course_pkg"
-        / "tools"
-        / "tuna_gripper_mount_transforms.json",
-    }
-
-
-def _load_tuna_calibration_for_planning(node):
-    loader = getattr(node, "load_tuna_calibration", None)
-    if callable(loader):
-        return loader()
-    sources = getattr(node, "tuna_calibration_sources", None)
-    if sources is None:
-        sources = _default_tuna_calibration_sources()
-    return load_tuna_gripper_calibration(**dict(sources))
 
 
 def _approach_clearance_config(grasp_profile):
@@ -1514,499 +1183,29 @@ def _log_selected_world_z_ranges(results):
     )
 
 
-def _tuna_generation_plan(start_pose_6d, candidate, debug_info):
-    pregrasp_pose = _transform_matrix_to_pose6d(
-        np.array(candidate.T_world_tcp_pregrasp, dtype=float, copy=True)
-    )
-    contact_pose = _transform_matrix_to_pose6d(
-        np.array(candidate.T_world_tcp_contact, dtype=float, copy=True)
-    )
-    debug = dict(debug_info)
-    debug.update(
-        {
-            "object_name": "tuna_fish_can",
-            "grasp_profile": "tuna_roll_up",
-            "tuna_policy": "roll_up",
-            "tuna_non_executable": True,
-            "tuna_non_executable_reason": (
-                "generation stage uses nominal calibration geometry and emits "
-                "no physical commands"
-            ),
-        }
-    )
-    return PickPlacePlan(
-        start_pose_6d=np.asarray(start_pose_6d, dtype=float).copy(),
-        pre_grasp_pose_6d=pregrasp_pose,
-        grasp_pose_6d=contact_pose,
-        drop_high_pose_6d=contact_pose.copy(),
-        drop_pose_6d=contact_pose.copy(),
-        steps=[],
-        debug_info=debug,
-        deferred_tuna_suffix=None,
-        plan_revision=0,
-    )
-
-
-def _validate_tuna_candidate_motion(node, candidate_index, poses):
-    validator = getattr(node, "validate_tuna_candidate_sequence", None)
-    if not callable(validator):
-        motion_executor = getattr(node, "motion_executor", None)
-        state_reader = getattr(motion_executor, "current_tuna_joint_state", None)
-        if not callable(state_reader):
-            raise TunaGraspError(
-                TunaErrorCode.CONFIGURATION,
-                "candidate_moveit_validation",
-                {
-                    "object_name": "tuna_fish_can",
-                    "reason": "full_chain_moveit_validator_unavailable",
-                },
-            )
-        from my_course_pkg.grasp.tuna_finalizer import (
-            MoveItPoseValidation,
-            RosMoveItValidationBackend,
-        )
-
-        backend = getattr(node, "_tuna_candidate_moveit_backend", None)
-        if backend is None:
-            backend = RosMoveItValidationBackend(node)
-            setattr(node, "_tuna_candidate_moveit_backend", backend)
-        joint_names, joint_positions = state_reader()
-        for pose_index, transform in enumerate(poses):
-            pose_6d = _transform_matrix_to_pose6d(
-                np.array(transform, dtype=float, copy=True)
-            )
-            validation = backend.validate_pose(
-                pose_6d,
-                joint_names,
-                joint_positions,
-                f"candidate_{candidate_index}:pose_{pose_index}",
-            )
-            if not isinstance(validation, MoveItPoseValidation) or not validation.success:
-                return False, 0.0
-            joint_names = validation.joint_names
-            joint_positions = validation.joint_positions
-        return True, 0.0
-    pose_6d_values = tuple(
-        _transform_matrix_to_pose6d(np.array(pose, dtype=float, copy=True))
-        for pose in poses
-    )
-    outcome = validator(
-        candidate_index=int(candidate_index),
-        poses=pose_6d_values,
-        target_object_name="tuna_fish_can",
-        allowed_contact_links=(
-            "robotiq_85_left_finger_tip_link",
-            "robotiq_85_right_finger_tip_link",
-        ),
-    )
-    if isinstance(outcome, bool):
-        passed = outcome
-        score = 0.0
-    elif isinstance(outcome, dict):
-        passed = bool(outcome.get("passed", False))
-        score = float(outcome.get("reachability_score", 0.0))
-    else:
-        passed = bool(getattr(outcome, "passed", False))
-        score = float(getattr(outcome, "reachability_score", 0.0))
-    if not np.isfinite(score):
-        raise TunaGraspError(
-            TunaErrorCode.PLANNING,
-            "candidate_moveit_validation",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "nonfinite_reachability_score",
-                "candidate_index": int(candidate_index),
-            },
-        )
-    return passed, score
-
-
-def _enumerate_tuna_candidates(
-    *,
-    node,
-    config,
-    bounds,
-    table_z_m,
-    calibration,
-    geometry,
-    require_moveit,
-):
-    open_geometry = interpolate_gripper_geometry(calibration, GRIPPER_OPEN_POSITION)
-    diameter_m = float(2.0 * bounds.radius_m)
-    height_m = float(bounds.size[2])
-    candidates = []
-    rejected = []
-    candidate_index = 0
-    for radial_index, radial in enumerate(
-        generate_radial_directions(config.radial_direction_count)
-    ):
-        # Reviewed sign convention: positive roll-in is right-handed about
-        # world-up x near-side radial and must never be changed per candidate.
-        roll_axis = np.cross(np.array([0.0, 0.0, 1.0]), radial)
-        for contact_height_m in config.contact_heights_m:
-            for pitch_deg in config.tool_z_angles_to_horizontal_deg:
-                candidate_index += 1
-                projected_width = required_width(height_m, diameter_m, pitch_deg)
-                straddle = evaluate_initial_straddle(
-                    open_geometry.pad_gap_m,
-                    projected_width,
-                    config.min_straddle_margin_m,
-                )
-                if not straddle.passed:
-                    rejected.append(
-                        {
-                            "candidate_index": candidate_index,
-                            "reason": "initial_straddle",
-                            "residual_m": float(straddle.residual),
-                        }
-                    )
-                    continue
-                contact = build_contact_support_pose(
-                    center_xy=bounds.center[:2],
-                    radius_m=bounds.radius_m,
-                    bottom_z_m=bounds.bottom_z_m,
-                    radial_direction=radial,
-                    contact_height_m=contact_height_m,
-                    tool_z_angle_to_horizontal_deg=pitch_deg,
-                    T_tcp_lower_pad_contact=geometry.T_tcp_lower_pad_contact,
-                )
-                pregrasp = build_pregrasp_pose(contact, config.approach_dist_m)
-                pivot = FrozenPivotContract(
-                    calibration_sha256=calibration.source_sha256,
-                    sample_timestamps=(1.0, 2.0, 3.0),
-                    qpos_peak_to_peak_rad=0.0,
-                    measured_qpos=geometry.measured_qpos,
-                    measured_pad_gap_m=geometry.pad_gap_m,
-                    T_world_tcp_preclamp=contact,
-                    T_tcp_pivot_frozen=geometry.T_tcp_lower_pad_contact,
-                    T_world_pivot=contact @ geometry.T_tcp_lower_pad_contact,
-                )
-                roll_waypoints = generate_roll_waypoints(
-                    pivot,
-                    roll_axis,
-                    total_angle_deg=config.roll_checkpoint_angles_deg[-1],
-                    max_microsegment_angle_deg=(
-                        config.roll_microsegment_max_angle_deg
-                    ),
-                )
-                pose_sequence = (pregrasp, contact) + tuple(
-                    waypoint.T_world_tcp for waypoint in roll_waypoints
-                )
-                clearance_records = []
-                envelope_geometries = tuple(calibration.points) + (geometry,)
-                for envelope_geometry in envelope_geometries:
-                    envelope_qpos = float(
-                        getattr(
-                            envelope_geometry,
-                            "qpos",
-                            getattr(envelope_geometry, "measured_qpos", np.nan),
-                        )
-                    )
-                    envelope_contact = build_contact_support_pose(
-                        center_xy=bounds.center[:2],
-                        radius_m=bounds.radius_m,
-                        bottom_z_m=bounds.bottom_z_m,
-                        radial_direction=radial,
-                        contact_height_m=contact_height_m,
-                        tool_z_angle_to_horizontal_deg=pitch_deg,
-                        T_tcp_lower_pad_contact=(
-                            envelope_geometry.T_tcp_lower_pad_contact
-                        ),
-                    )
-                    envelope_pregrasp = build_pregrasp_pose(
-                        envelope_contact,
-                        config.approach_dist_m,
-                    )
-                    envelope_pivot = FrozenPivotContract(
-                        calibration_sha256=calibration.source_sha256,
-                        sample_timestamps=(1.0, 2.0, 3.0),
-                        qpos_peak_to_peak_rad=0.0,
-                        measured_qpos=envelope_qpos,
-                        measured_pad_gap_m=float(envelope_geometry.pad_gap_m),
-                        T_world_tcp_preclamp=envelope_contact,
-                        T_tcp_pivot_frozen=(
-                            envelope_geometry.T_tcp_lower_pad_contact
-                        ),
-                        T_world_pivot=(
-                            envelope_contact
-                            @ envelope_geometry.T_tcp_lower_pad_contact
-                        ),
-                    )
-                    envelope_roll = generate_roll_waypoints(
-                        envelope_pivot,
-                        roll_axis,
-                        total_angle_deg=config.roll_checkpoint_angles_deg[-1],
-                        max_microsegment_angle_deg=(
-                            config.roll_microsegment_max_angle_deg
-                        ),
-                    )
-                    envelope_poses = (envelope_pregrasp, envelope_contact) + tuple(
-                        waypoint.T_world_tcp for waypoint in envelope_roll
-                    )
-                    for pose_index, envelope_pose in enumerate(envelope_poses):
-                        clearance_records.append(
-                            (
-                                envelope_qpos,
-                                pose_index,
-                                support_hull_clearance_lower_bound(
-                                    envelope_pose,
-                                    envelope_geometry.support_hull_tcp,
-                                    table_z_m,
-                                    calibration.max_interpolation_error_m,
-                                ),
-                            )
-                        )
-                minimum_record = min(clearance_records, key=lambda item: item[2])
-                clearance = float(minimum_record[2])
-                if clearance < config.min_table_clearance_m:
-                    desired_records = [
-                        item
-                        for item in clearance_records
-                        if np.isclose(
-                            item[0], geometry.measured_qpos, rtol=0.0, atol=1e-12
-                        )
-                    ]
-                    rejected.append(
-                        {
-                            "candidate_index": candidate_index,
-                            "reason": "support_hull_table_clearance",
-                            "clearance_m": clearance,
-                            "minimum_qpos": float(minimum_record[0]),
-                            "minimum_pose_index": int(minimum_record[1]),
-                            "pregrasp_clearance_m": float(desired_records[0][2]),
-                            "contact_clearance_m": float(desired_records[1][2]),
-                            "roll_minimum_clearance_m": float(
-                                min(item[2] for item in desired_records[2:])
-                            ),
-                        }
-                    )
-                    continue
-                reachability_score = 0.0
-                if require_moveit:
-                    passed, reachability_score = _validate_tuna_candidate_motion(
-                        node,
-                        candidate_index,
-                        pose_sequence,
-                    )
-                    if not passed:
-                        rejected.append(
-                            {
-                                "candidate_index": candidate_index,
-                                "reason": "moveit_full_chain",
-                            }
-                        )
-                        continue
-                candidates.append(
-                    TunaPlanningCandidate(
-                        radial_index=radial_index,
-                        radial_direction=np.array(radial, dtype=float, copy=True),
-                        contact_height_m=float(contact_height_m),
-                        pitch_deg=float(pitch_deg),
-                        T_world_tcp_contact=np.array(contact, copy=True),
-                        T_world_tcp_pregrasp=np.array(pregrasp, copy=True),
-                        clearance_lower_bound_m=clearance,
-                        reachability_score=reachability_score,
-                    )
-                )
-    candidates.sort(
-        key=lambda candidate: (
-            -candidate.reachability_score,
-            -candidate.clearance_lower_bound_m,
-            candidate.radial_index,
-            candidate.contact_height_m,
-            candidate.pitch_deg,
-        )
-    )
-    return tuple(candidates), tuple(rejected), candidate_index
-
-
-def _plan_tuna_fish_can_candidates(
-    *,
-    node,
-    start_pose_6d,
-    T_world_obj_raw,
-    selected_object_path,
-    object_cam_pose_path,
-):
-    try:
-        config = read_tuna_config()
-    except (TypeError, ValueError) as exc:
-        raise TunaGraspError(
-            TunaErrorCode.CONFIGURATION,
-            "config",
-            {"object_name": "tuna_fish_can", "reason": type(exc).__name__},
-        ) from exc
-    legacy_flags = _legacy_debug_flags_enabled()
-    if legacy_flags:
-        raise TunaGraspError(
-            TunaErrorCode.CONFIGURATION,
-            "debug_selector",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "legacy_and_tuna_debug_selectors_conflict",
-                "legacy_flags": list(legacy_flags),
-            },
-        )
-    is_generation = config.debug_stop_after == "generation"
-    if not is_generation and config.preclamp_position is None:
-        raise TunaGraspError(
-            TunaErrorCode.CONFIGURATION,
-            "preclamp",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "qualified_preclamp_position_missing",
-            },
-        )
-    provenance = _validate_tuna_perception_cache(
-        node,
-        selected_object_path=selected_object_path,
-        object_cam_pose_path=object_cam_pose_path,
-        require_fresh_scene=not is_generation,
-    )
-    table_z_m = _tuna_table_z(node)
-    reception_boundary = time.monotonic()
-    source_boundary = float(getattr(node, "tuna_bounds_source_boundary", 0.0))
-    samples = _collect_tuna_bounds_samples(node, 3, reception_boundary)
-    try:
-        bounds = validate_tuna_bounds_samples(
-            samples,
-            required_count=3,
-            source_boundary=source_boundary,
-            reception_boundary=reception_boundary,
-            stability_tolerance_m=config.initial_bounds_stability_tolerance_m,
-            table_z_m=table_z_m,
-            table_consistency_tolerance_m=(
-                config.initial_bounds_stability_tolerance_m
-            ),
-        )
-    except (TypeError, ValueError) as exc:
-        raise TunaGraspError(
-            TunaErrorCode.BOUNDS,
-            "initial_bounds",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": str(exc),
-            },
-        ) from exc
-    calibration, artifact = _load_tuna_calibration_for_planning(node)
-    if is_generation:
-        q_min = calibration.points[0].qpos
-        q_max = calibration.points[-1].qpos
-        geometry_qpos = 0.5 * (q_min + q_max)
-    else:
-        geometry_qpos = config.preclamp_position
-    geometry = interpolate_gripper_geometry(calibration, geometry_qpos)
-    candidates, rejected, grid_count = _enumerate_tuna_candidates(
-        node=node,
-        config=config,
-        bounds=bounds,
-        table_z_m=table_z_m,
-        calibration=calibration,
-        geometry=geometry,
-        require_moveit=not is_generation,
-    )
-    if not candidates:
-        raise TunaGraspError(
-            TunaErrorCode.PLANNING,
-            "candidate_generation",
-            {
-                "object_name": "tuna_fish_can",
-                "reason": "all_candidates_rejected",
-                "grid_count": int(grid_count),
-                "rejected_count": len(rejected),
-            },
-        )
-    shared_debug = {
-        "tuna_debug_stop_after": config.debug_stop_after,
-        "tuna_candidate_grid_count": int(grid_count),
-        "tuna_candidate_accepted_count": len(candidates),
-        "tuna_candidate_rejections": list(rejected),
-        "tuna_bounds_center": bounds.center.copy(),
-        "tuna_bounds_size": bounds.size.copy(),
-        "tuna_bounds_source_timestamps": list(bounds.source_timestamps),
-        "tuna_bounds_received_monotonic": list(bounds.received_monotonic),
-        "tuna_table_z_m": table_z_m,
-        "tuna_calibration_sha256": calibration.source_sha256,
-        "tuna_calibration_canonical_content_sha256": artifact[
-            "canonical_content_sha256"
-        ],
-        "tuna_geometry_qpos": float(geometry_qpos),
-        "tuna_perception_cache_invalidation_verified": (
-            provenance.cache_invalidation_verified
-        ),
-        "tuna_perception_files": [dict(item) for item in provenance.files],
-        "T_world_obj_raw": np.asarray(T_world_obj_raw, dtype=float).copy(),
-    }
-    results = []
-    for ranked_index, candidate in enumerate(candidates, start=1):
-        candidate_debug = dict(shared_debug)
-        candidate_debug.update(
-            {
-                "tuna_candidate_rank": ranked_index,
-                "tuna_radial_index": candidate.radial_index,
-                "tuna_radial_direction_world": (
-                    candidate.radial_direction.copy()
-                ),
-                "tuna_contact_height_m": candidate.contact_height_m,
-                "tuna_pitch_deg": candidate.pitch_deg,
-                "tuna_clearance_lower_bound_m": (
-                    candidate.clearance_lower_bound_m
-                ),
-                "tuna_reachability_score": candidate.reachability_score,
-            }
-        )
-        if is_generation:
-            plan = _tuna_generation_plan(start_pose_6d, candidate, candidate_debug)
-        else:
-            plan = build_tuna_preclamp_plan(
-                start_pose_6d=start_pose_6d,
-                pregrasp_pose_6d=_transform_matrix_to_pose6d(
-                    np.array(candidate.T_world_tcp_pregrasp, copy=True)
-                ),
-                contact_support_pose_6d=_transform_matrix_to_pose6d(
-                    np.array(candidate.T_world_tcp_contact, copy=True)
-                ),
-                preclamp_position=config.preclamp_position,
-                final_roll_angle_deg=config.roll_checkpoint_angles_deg[-1],
-                debug_info=candidate_debug,
-            )
-        grasp_pose_6d = _transform_matrix_to_pose6d(
-            np.array(candidate.T_world_tcp_contact, copy=True)
-        )
-        results.append(
-            PickPlacePlanningResult(
-                plan=plan,
-                T_world_obj=np.asarray(T_world_obj_raw, dtype=float).copy(),
-                T_world_grasp=np.array(candidate.T_world_tcp_contact, copy=True),
-                grasp_pose_6d=grasp_pose_6d,
-                candidate_index=ranked_index,
-                candidate_count=len(candidates),
-            )
-        )
-    return results
-
-
 def plan_pick_place_candidates_from_perception(
     node,
     start_pose_6d,
     object_cam_pose_path=FOUNDATIONPOSE_OBJECT_CAMERA_POSE_JSON,
     selected_object_path=SELECTED_OBJECT_PATH,
     camera_frame=CAMERA_FRAME,
+    drop_target=None,
+    execution_mode=GRASP_EXECUTION_MODE,
 ):
+    execution_mode = str(execution_mode).strip().lower()
+    if drop_target is not None:
+        if not isinstance(drop_target, DropTarget):
+            raise TypeError("drop_target must be a validated DropTarget.")
+        if execution_mode != "safe_place":
+            raise ValueError(
+                "An explicit DropTarget requires execution_mode='safe_place'."
+            )
     selected_object_name = get_selected_object_info(selected_object_path)
     T_world_obj_raw = estimate_object_world_pose(
         node,
         object_cam_pose_path,
         camera_frame,
     )
-    if _normalize_tuna_object_name(selected_object_name) == "tuna_fish_can":
-        return _plan_tuna_fish_can_candidates(
-            node=node,
-            start_pose_6d=start_pose_6d,
-            T_world_obj_raw=T_world_obj_raw,
-            selected_object_path=selected_object_path,
-            object_cam_pose_path=object_cam_pose_path,
-        )
     T_world_obj = canonicalize_tabletop_object_pose(
         T_world_obj_raw,
         selected_object_name,
@@ -2028,14 +1227,18 @@ def plan_pick_place_candidates_from_perception(
         if grasp_profile == "vertical"
         else None
     )
-    print(f"Grasp execution mode: {GRASP_EXECUTION_MODE}")
+    print(f"Grasp execution mode: {execution_mode}")
     obstacles = _load_obstacles_for_place_and_clearance(
         node,
         selected_object_name,
         grasp_profile,
     )
     safe_place_selection = None
-    if GRASP_EXECUTION_MODE == "safe_place" and GRASP_PLACE_ENABLED:
+    if (
+        drop_target is None
+        and execution_mode == "safe_place"
+        and GRASP_PLACE_ENABLED
+    ):
         if GRASP_PLACE_USE_SCENE:
             safe_place_selection = _select_safe_place_xy(obstacles)
         else:
@@ -2120,24 +1323,32 @@ def plan_pick_place_candidates_from_perception(
         geometry_center_object = get_side_grasp_geometry_center(
             selected_object_name,
         )
-        drop_pose_6d = (
-            _build_safe_drop_pose_for_grasp(
+        if drop_target is not None:
+            drop_pose_6d = build_drop_pose_6d(
+                grasp_pose_6d,
+                drop_position=drop_target.position,
+                release_z=drop_target.position[2],
+            )
+        elif execution_mode == "safe_place":
+            drop_pose_6d = _build_safe_drop_pose_for_grasp(
                 grasp_pose_6d,
                 safe_place_selection,
             )
-            if GRASP_EXECUTION_MODE == "safe_place"
-            else None
-        )
+        else:
+            drop_pose_6d = None
         plan = plan_safe_pick_place_steps(
             start_pose_6d=start_pose_6d,
             grasp_pose_6d=grasp_pose_6d,
             drop_pose_6d=drop_pose_6d,
             direct_to_grasp=grasp_profile == "side",
-            execution_mode=GRASP_EXECUTION_MODE,
+            execution_mode=execution_mode,
             debug_info={
                 "object_name": selected_object_name,
                 "grasp_profile": grasp_profile,
-                "execution_mode": GRASP_EXECUTION_MODE,
+                "execution_mode": execution_mode,
+                "drop_target": (
+                    None if drop_target is None else drop_target.as_dict()
+                ),
                 "T_world_obj_raw": T_world_obj_raw.copy(),
                 "T_world_obj": T_world_obj.copy(),
                 "raw_object_z_axis_world": object_local_z_axis_world(
@@ -2199,9 +1410,13 @@ def plan_pick_place_candidates_from_perception(
                     else vertical_grasp_correction_xyz.copy()
                 ),
                 "safe_place_xy": (
-                    None
-                    if safe_place_selection is None
-                    else safe_place_selection.xy.copy()
+                    np.asarray(drop_target.position[:2], dtype=float)
+                    if drop_target is not None
+                    else (
+                        None
+                        if safe_place_selection is None
+                        else safe_place_selection.xy.copy()
+                    )
                 ),
                 "safe_place_min_clearance_m": (
                     None
@@ -2256,6 +1471,8 @@ def plan_pick_place_from_perception(
     object_cam_pose_path=FOUNDATIONPOSE_OBJECT_CAMERA_POSE_JSON,
     selected_object_path=SELECTED_OBJECT_PATH,
     camera_frame=CAMERA_FRAME,
+    drop_target=None,
+    execution_mode=GRASP_EXECUTION_MODE,
 ):
     return plan_pick_place_candidates_from_perception(
         node,
@@ -2263,4 +1480,6 @@ def plan_pick_place_from_perception(
         object_cam_pose_path,
         selected_object_path,
         camera_frame,
+        drop_target,
+        execution_mode,
     )[0]

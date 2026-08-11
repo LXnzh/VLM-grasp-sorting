@@ -144,7 +144,7 @@ def test_box_profile_prefers_vertical_grasp_over_side_grasp():
     selected = grasp_selector.select_preferred_grasp(
         T_world_obj,
         np.array([side_grasp, vertical_grasp]),
-        "pudding_box",
+        "gelatin_box",
     )
 
     np.testing.assert_allclose(selected, vertical_grasp)
@@ -608,7 +608,12 @@ def test_center_profile_prefers_middle_candidate_when_angles_match():
     np.testing.assert_allclose(selected, middle_grasp)
 
 
-def make_round_top_grasp(name="apple", angle_tool_z=(0.0, 0.0, -1.0), xy=(0.0, 0.0), normalized_height=0.08):
+def make_round_top_grasp(
+    name="apple",
+    angle_tool_z=(0.0, 0.0, -1.0),
+    xy=(0.0, 0.0),
+    normalized_height=0.08,
+):
     geometry = grasp_selector.OBJECT_GEOMETRY_BY_NAME[name]
     center = np.asarray(geometry["center"], dtype=float)
     size = np.asarray(geometry["bbox_size"], dtype=float)

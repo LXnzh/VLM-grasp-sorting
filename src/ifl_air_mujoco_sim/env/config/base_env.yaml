@@ -87,6 +87,52 @@ placement_slots:
   - [-0.74, 0.20, 0.0]
   - [-0.55, 0.30, 0.0]
   - [-0.85, 0.35, 0.0]
+
+# Sorting uses a lower two-row object field and reserves the upper table area
+# for one food bin. The outer bin footprint (including walls) stays disjoint
+# from every supported object's conservative 0.14 m footprint.
+sorting_placement_slots:
+  - [-0.85, -0.14, 0.0]
+  - [-0.65, -0.14, 0.0]
+  - [-0.45, -0.14, 0.0]
+  - [-0.85, 0.08, 0.0]
+  - [-0.65, 0.08, 0.0]
+  - [-0.45, 0.08, 0.0]
+
+# Ordinary simulator launches have no classification bin.
+classification_bins:
+  enabled: false
+  bins: []
+
+# Enabled only when MY_COURSE_SINGLE_BIN_MODE=1 (the GUI product flow).
+classification_bins_single_random:
+  enabled: true
+  random_color: true
+  position_range:
+    x: [-0.65, -0.55]
+    y: [0.40, 0.45]
+  layout_constraints:
+    table_bounds: [-1.32, 0.20, -0.30, 0.60]
+    overview_xy_bounds: [-1.02, -0.18, -0.29, 0.58]
+    base_exclusion: [-0.18, 0.18, -0.22, 0.22]
+    object_footprint_radius_m: 0.14
+    object_height_m: 0.12
+    bin_safety_margin_m: 0.04
+    reach_radius_m: [0.25, 1.10]
+    table_surface_z_m: -0.025
+  bins:
+    - category: "food"
+      name: "food_bin"
+      center_xy: [-0.60, 0.425]
+      inner_size: [0.24, 0.20]
+      wall_height: 0.10
+      wall_thickness: 0.01
+      floor_thickness: 0.01
+      color: [0.0, 1.0, 1.0, 1.0]
+
+# Dynamic RGB-D tracking needs a real stream; the pure grasp scene can keep
+# its low render rate when sorting mode is disabled.
+sorting_render_fps: 10.0
 # YCB scene-generation pool (16 release-qualified objects)
 objects:
   - name: "tomato_soup_can"

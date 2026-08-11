@@ -42,7 +42,7 @@ def _write_blue_racquetball_alias(path):
 
 def _mask_at(row, col):
     mask = np.zeros((4, 5), dtype=np.uint8)
-    mask[row : row + 2, col : col + 2] = 1
+    mask[row: row + 2, col: col + 2] = 1
     return mask
 
 
@@ -119,27 +119,6 @@ def test_load_mask_accepts_sam2_truncated_tomato_soup_label(tmp_path):
     _write_sam2_response(
         sam2_json,
         [_annotation("tomato soup", expected_mask)],
-    )
-
-    node = FoundationPoseEstimationNode(
-        selected_json=selected_json,
-        sam2_response_json=sam2_json,
-        output_dir=tmp_path / "foundationpose",
-    )
-
-    mask = node._load_mask(node._load_target())
-
-    np.testing.assert_array_equal(mask, expected_mask.astype(bool))
-
-
-def test_load_mask_accepts_sam2_truncated_tuna_fish_label(tmp_path):
-    selected_json = tmp_path / "selected.json"
-    sam2_json = tmp_path / "sam2.json"
-    _write_selected(selected_json, "tuna fish can")
-    expected_mask = _mask_at(1, 2)
-    _write_sam2_response(
-        sam2_json,
-        [_annotation("tuna fish", expected_mask)],
     )
 
     node = FoundationPoseEstimationNode(

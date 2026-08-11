@@ -57,6 +57,8 @@ class UR10eRos2Interface:
             scene_object_categories=sim_cfg.get('scene_object_categories', {}),
             assigned_object_names=sim_cfg.get('assigned_object_names', []),
             placement_slots=sim_cfg.get('placement_slots', []),
+            classification_bins=sim_cfg.get('classification_bins'),
+            camera_size=sim_cfg.get('camera_size', (1280, 720)),
         )
         self.cloud_arr = np.empty(
             307200,

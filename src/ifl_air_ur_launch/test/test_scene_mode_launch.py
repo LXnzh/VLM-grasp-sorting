@@ -120,9 +120,11 @@ def test_invalid_explicit_scene_mode_fails_without_prompt(launch_module):
 
 def test_launch_process_forwards_random_as_hydra_override(launch_module):
     class FakeContext:
-        @staticmethod
-        def perform_substitution(_substitution):
-            return "random"
+        responses = iter(["random", "true", "false"])
+
+        @classmethod
+        def perform_substitution(cls, _substitution):
+            return next(cls.responses)
 
     actions = launch_module.launch_mujoco_ros_interface(FakeContext())
 
@@ -131,6 +133,45 @@ def test_launch_process_forwards_random_as_hydra_override(launch_module):
         substitution.text for substitution in actions[0].cmd[2]
     )
     assert "scene_mode=random" in shell_command
+    assert "sim.headless=true" in shell_command
+    assert "MUJOCO_GL=egl python3" in shell_command
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("true", "true"),
+        ("YES", "true"),
+        ("1", "true"),
+        ("false", "false"),
+        ("Off", "false"),
+        ("0", "false"),
+    ],
+)
+def test_sim_headless_is_normalized(launch_module, raw_value, expected):
+    assert launch_module.resolve_sim_headless(raw_value) == expected
+
+
+def test_invalid_sim_headless_fails_closed(launch_module):
+    with pytest.raises(ValueError, match="sim_headless.*true or false"):
+        launch_module.resolve_sim_headless("automatic")
+
+
+def test_gui_launch_does_not_force_offscreen_rendering(launch_module):
+    class FakeContext:
+        responses = iter(["random", "false", "false"])
+
+        @classmethod
+        def perform_substitution(cls, _substitution):
+            return next(cls.responses)
+
+    actions = launch_module.launch_mujoco_ros_interface(FakeContext())
+    shell_command = "".join(
+        substitution.text for substitution in actions[0].cmd[2]
+    )
+
+    assert "sim.headless=false" in shell_command
+    assert "MUJOCO_GL" not in shell_command
 
 
 def test_scene_prompt_action_precedes_all_launch_children(launch_module):
@@ -340,7 +381,7 @@ def test_assign_launch_prompts_and_forwards_hydra_list(
     )
 
     class FakeContext:
-        responses = iter(["assign", "prompt", "false"])
+        responses = iter(["assign", "prompt", "false", "false"])
 
         @classmethod
         def perform_substitution(cls, _substitution):
@@ -376,7 +417,7 @@ def test_assign_launch_uses_explicit_names_without_prompt(
     )
 
     class FakeContext:
-        responses = iter(["assign", "[banana,apple]", "false"])
+        responses = iter(["assign", "[banana,apple]", "false", "false"])
 
         @classmethod
         def perform_substitution(cls, _substitution):

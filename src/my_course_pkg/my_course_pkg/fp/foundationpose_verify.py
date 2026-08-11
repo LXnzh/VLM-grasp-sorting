@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Verify FoundationPose mesh projection against SAM2 mask."""
-import argparse, json, math, re, subprocess, sys
+import argparse
+import json
+import math
+import re
+import subprocess
+import sys
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
@@ -29,7 +34,8 @@ def run_fp() -> np.ndarray:
     )
     if not m:
         raise RuntimeError(f"Cannot parse pose matrix.\n{p.stdout}")
-    rows = [line.strip().lstrip("[").rstrip("]").strip() for line in m.group(1).strip().splitlines() if line.strip()]
+    rows = [line.strip().lstrip("[").rstrip("]").strip()
+            for line in m.group(1).strip().splitlines() if line.strip()]
     return np.array([[float(x) for x in row.split()] for row in rows[:4]])
 
 

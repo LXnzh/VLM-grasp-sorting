@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from collections import deque
 import time
 
 from action_msgs.msg import GoalStatus
@@ -11,7 +10,6 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import JointState
 from sim_pick_place.utils.helpers import (
     _pose6d_to_posestamped_msg,
-    _pose6d_to_transform_matrix,
     _posestamped_msg_to_pose6d,
     _transform_matrix_to_pose6d,
 )
@@ -44,8 +42,6 @@ from my_course_pkg.grasp.config import (
     WAYPOINT_MAX_DIST,
 )
 from my_course_pkg.grasp.transforms import pose_text
-from my_course_pkg.grasp.tuna_executor import TunaExecutionCoordinator
-from my_course_pkg.grasp.tuna_roll_grasp import QposSample
 from my_course_pkg.verify_init_pose import VerifyInitPoseNode
 
 
@@ -190,9 +186,6 @@ class ArmMotionExecutor:
         self.gripper_controller = gripper_controller
         self.latest_arm_joint_names = []
         self.latest_arm_position_by_name = {}
-        self.latest_full_joint_names = []
-        self.latest_full_joint_positions = []
-        self.latest_tuna_qpos_samples = deque(maxlen=256)
         self.trajectory_action_client = ActionClient(
             node,
             FollowJointTrajectory,
@@ -217,20 +210,6 @@ class ArmMotionExecutor:
         self.debug_stop_reached = False
 
     def joint_state_callback(self, msg):
-        names = list(getattr(msg, "name", ()))
-        positions = list(getattr(msg, "position", ()))
-        try:
-            positions_are_finite = bool(np.isfinite(positions).all())
-        except (TypeError, ValueError):
-            positions_are_finite = False
-        if len(names) == len(positions) and positions_are_finite:
-            self.latest_full_joint_names = names
-            self.latest_full_joint_positions = [float(value) for value in positions]
-            if "robotiq_85_left_knuckle_joint" in names:
-                index = names.index("robotiq_85_left_knuckle_joint")
-                self.latest_tuna_qpos_samples.append(
-                    QposSample(time.monotonic(), float(positions[index]))
-                )
         arm_position_by_name = VerifyInitPoseNode.arm_joint_position_map(msg)
         if len(arm_position_by_name) == len(VerifyInitPoseNode.arm_joint_order):
             self.latest_arm_position_by_name = arm_position_by_name
@@ -1584,114 +1563,8 @@ class ArmMotionExecutor:
 
         self._publish_grasp_debug_markers(plan)
 
-    def execute_tuna_step(self, step):
-        return self.execute_step(step)
-
-    def execute_tuna_micro_pose(self, target_pose_6d, step_name):
-        target = np.asarray(target_pose_6d, dtype=float)
-        if target.shape != (6,) or not np.isfinite(target).all():
-            return False
-        self.enter_servo_pos_mode()
-        actual_before = np.asarray(self.get_current_ee_pose_6d(), dtype=float)
-        self.move_linear(actual_before, target)
-        actual_after = np.asarray(self.get_current_ee_pose_6d(), dtype=float)
-        position_error = float(np.linalg.norm(actual_after[:3] - target[:3]))
-        target_rotation = _pose6d_to_transform_matrix(target)[:3, :3]
-        actual_rotation = _pose6d_to_transform_matrix(actual_after)[:3, :3]
-        relative = target_rotation.T @ actual_rotation
-        orientation_error = float(
-            np.arccos(np.clip((np.trace(relative) - 1.0) / 2.0, -1.0, 1.0))
-        )
-        passed = bool(
-            position_error <= FINAL_APPROACH_POSITION_TOLERANCE_M
-            and orientation_error <= np.deg2rad(2.0)
-        )
-        self.node.get_logger().info(
-            "Tuna micro-waypoint result: "
-            f"step={step_name}, position_error_m={position_error:.6f}, "
-            f"orientation_error_rad={orientation_error:.6f}, "
-            f"passed={str(passed).lower()}"
-        )
-        return passed
-
-    def collect_tuna_qpos_samples(self, required_count, command_boundary):
-        required_count = int(required_count)
-        deadline = time.monotonic() + 2.0
-        fresh = []
-        while time.monotonic() < deadline:
-            fresh = [
-                sample
-                for sample in tuple(self.latest_tuna_qpos_samples)
-                if sample.timestamp > float(command_boundary)
-            ]
-            if len(fresh) >= required_count:
-                return tuple(fresh[-required_count:])
-            time.sleep(0.01)
-        raise RuntimeError(
-            "Timed out waiting for fresh Robotiq qpos samples: "
-            f"required={required_count}, received={len(fresh)}."
-        )
-
-    def collect_tuna_bounds_samples(self, required_count, reception_boundary):
-        from my_course_pkg.grasp.pick_place_planner import (
-            _collect_tuna_bounds_samples,
-        )
-
-        return _collect_tuna_bounds_samples(
-            self.node,
-            required_count,
-            reception_boundary,
-        )
-
-    def current_tuna_tcp_transform(self):
-        return _pose6d_to_transform_matrix(self.get_current_ee_pose_6d())
-
-    def current_tuna_joint_state(self):
-        if (
-            not self.latest_full_joint_names
-            or len(self.latest_full_joint_names)
-            != len(self.latest_full_joint_positions)
-        ):
-            raise RuntimeError("No complete /joint_states sample is available for Tuna.")
-        return (
-            tuple(self.latest_full_joint_names),
-            tuple(self.latest_full_joint_positions),
-        )
-
-    def confirm_tuna_stage(self, stage):
-        callback = getattr(self.node, "confirm_tuna_stage", None)
-        if not callable(callback):
-            self.node.get_logger().error(
-                "Tuna staged execution requires an explicit operator-confirmation "
-                f"callback; stage={stage}."
-            )
-            return False
-        return bool(callback(stage))
-
-    def hold_tuna_failure(self, gripper_target):
-        # Both controllers retain their last accepted position targets.  Do not
-        # issue a rollback, re-anchor, open, or replay command on a Tuna fault.
-        self.node.get_logger().error(
-            "Tuna failure hold engaged at the latest measured TCP; "
-            f"preserved_gripper_target={gripper_target!r}."
-        )
-
-    def log_tuna_event(self, event, details):
-        self.node.get_logger().info(
-            f"Tuna event: event={event}, details={details!r}"
-        )
-
     def execute_plan(self, plan):
         self.debug_stop_reached = False
-        if getattr(plan, "debug_info", {}).get("object_name") == "tuna_fish_can":
-            from my_course_pkg.grasp.pick_place_planner import (
-                _load_tuna_calibration_for_planning,
-            )
-
-            calibration, _artifact = _load_tuna_calibration_for_planning(self.node)
-            outcome = TunaExecutionCoordinator(self, calibration).execute(plan)
-            self.debug_stop_reached = outcome.stopped_after != "none"
-            return outcome
         stop_after_close_pending = False
         profile = self._grasp_profile(plan)
         vertical_command_offset_xyz = np.zeros(3, dtype=float)
@@ -1889,11 +1762,18 @@ class ArmMotionExecutor:
             time.sleep(0.1)
 
         if not self.latest_arm_joint_names:
-            self.node.get_logger().warn("No arm joint names received from /joint_states; skipping return to initial pose.")
+            self.node.get_logger().warn(
+                "No arm joint names received from /joint_states; "
+                "skipping return to initial pose."
+            )
             return False
 
         print("Returning to initial joint pose...")
-        print(f"Initial pose joint names ({len(self.latest_arm_joint_names)}): {self.latest_arm_joint_names}")
+        print(
+            "Initial pose joint names "
+            f"({len(self.latest_arm_joint_names)}): "
+            f"{self.latest_arm_joint_names}"
+        )
         self.switch_to_joint_control()
         time.sleep(0.5)
 

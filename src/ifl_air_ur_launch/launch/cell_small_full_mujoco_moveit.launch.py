@@ -28,6 +28,19 @@ def resolve_runtime_output(quiet_requested, normal_output):
     return normal_output
 
 
+def resolve_sim_headless(requested_value):
+    """Normalize the explicit MuJoCo display-mode launch argument."""
+    normalized_value = str(requested_value).strip().casefold()
+    if normalized_value in {"1", "true", "yes", "on"}:
+        return "true"
+    if normalized_value in {"0", "false", "no", "off"}:
+        return "false"
+    raise ValueError(
+        "sim_headless must be true or false; "
+        f"got {requested_value!r}"
+    )
+
+
 def resolve_scene_mode(requested_mode, input_fn=None, output_fn=None):
     """Resolve an explicit mode or interactively prompt until one is valid."""
     input_fn = input if input_fn is None else input_fn
@@ -197,9 +210,15 @@ def launch_mujoco_ros_interface(context):
         hydra_overrides.append(
             f"assigned_object_names=[{assigned_value}]"
         )
+    headless_requested = context.perform_substitution(
+        LaunchConfiguration("sim_headless")
+    )
+    sim_headless = resolve_sim_headless(headless_requested)
+    hydra_overrides.append(f"sim.headless={sim_headless}")
     override_command = " ".join(
         shlex.quote(override) for override in hydra_overrides
     )
+    render_environment = "MUJOCO_GL=egl " if sim_headless == "true" else ""
     quiet_requested = context.perform_substitution(
         LaunchConfiguration("quiet_runtime_output")
     )
@@ -214,8 +233,8 @@ def launch_mujoco_ros_interface(context):
                     "source /opt/ros/humble/setup.bash && "
                     "source install/setup.bash && "
                     "cd src/ifl_air_mujoco_sim && "
-                    "source .venv/bin/activate && "
-                    f"python3 ros2_main.py {override_command}"
+                    f"{render_environment}python3 ros2_main.py "
+                    f"{override_command}"
                 ),
             ],
             name="ifl_air_mujoco_ros_interface",
@@ -254,6 +273,14 @@ def generate_launch_description():
         "quiet_runtime_output",
         default_value="false",
         description="Write persistent runtime output to logs only.",
+    )
+    sim_headless_arg = DeclareLaunchArgument(
+        "sim_headless",
+        default_value="false",
+        description=(
+            "Run MuJoCo without its GLFW viewer. Keep false for the normal "
+            "interactive GUI and use true on a display-less host."
+        ),
     )
     scene_mode_arg = DeclareLaunchArgument(
         "scene_mode",
@@ -326,6 +353,7 @@ def generate_launch_description():
             launch_moveit_iface_arg,
             launch_servo_watchdog_arg,
             quiet_runtime_output_arg,
+            sim_headless_arg,
             scene_mode_arg,
             assigned_object_names_arg,
             mujoco_ros_interface,

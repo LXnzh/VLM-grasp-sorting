@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from my_course_pkg.ycb_models import (
@@ -102,7 +100,5 @@ def test_visual_asset_resolution_reports_missing_material_texture(tmp_path):
 
 
 def test_visual_asset_resolution_requires_numbered_directory(tmp_path):
-    expected = Path(tmp_path) / "048_hammer"
-
     with pytest.raises(FileNotFoundError, match="hammer.*048_hammer"):
         resolve_ycb_visual_assets(tmp_path, "hammer")

@@ -1417,13 +1417,13 @@ def test_vertical_plan_orders_reanchor_before_approach_and_close(monkeypatch):
     executor.converge_at_vertical_pregrasp = converge_at_vertical_pregrasp
     executor.move_vertical_approach = (
         lambda start, end, offset, final_z_bounds=None: events.append(
-        (
-            "approach",
-            np.asarray(end, dtype=float).copy(),
-            np.asarray(offset, dtype=float).copy(),
-            final_z_bounds,
+            (
+                "approach",
+                np.asarray(end, dtype=float).copy(),
+                np.asarray(offset, dtype=float).copy(),
+                final_z_bounds,
+            )
         )
-    )
     )
     executor.verify_vertical_final_grasp = (
         lambda pose, final_z_bounds=None: events.append(

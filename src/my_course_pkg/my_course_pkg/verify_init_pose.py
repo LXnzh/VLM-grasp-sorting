@@ -24,12 +24,16 @@ class VerifyInitPoseNode(Node):
     expected_joint_positions = [-0.2345, -1.0715, -1.8688, -1.5812, 1.6339, 2.8947]
     expected_joint_by_name = dict(zip(arm_joint_order, expected_joint_positions))
     gripper_joint_keywords = ("robotiq",)
-    
+
     def __init__(self, node_name: str = 'verify_init_pose_node'):
         super().__init__(node_name)
-        self.get_logger().info("Node initialized. Please verify the robot's initial pose in the simulation.")
-        
-        self.cbg = MutuallyExclusiveCallbackGroup()#互斥，同一时间只能执行一个回调，避免move命令和joint_state回调冲突
+        self.get_logger().info(
+            "Node initialized. Please verify the robot's initial pose "
+            "in the simulation."
+        )
+
+        # Avoid overlapping move commands and joint-state callbacks.
+        self.cbg = MutuallyExclusiveCallbackGroup()
         self.arm_cbg = ReentrantCallbackGroup()
         self.subscription = self.create_subscription(
             JointState,
@@ -45,7 +49,7 @@ class VerifyInitPoseNode(Node):
             "/scaled_joint_trajectory_controller/follow_joint_trajectory",
             callback_group=self.arm_cbg,
         )
-        
+
         # Flag to prevent spamming move commands
         self.is_moving = False
         self.motion_done = False
@@ -70,7 +74,8 @@ class VerifyInitPoseNode(Node):
 
             if not success:
                 self.get_logger().warn(
-                    "change_state_to_joint_ctl failed; retrying direct JOINT_TRAJ_CTL state request."
+                    "change_state_to_joint_ctl failed; retrying direct "
+                    "JOINT_TRAJ_CTL state request."
                 )
                 success = self.arm_api2_client.change_state_to("JOINT_TRAJ_CTL")
 
@@ -104,7 +109,11 @@ class VerifyInitPoseNode(Node):
 
     @classmethod
     def build_initial_joint_goal(cls, joint_names=None, stamp=None, frame_id="world"):
-        names = [name for name in cls.arm_joint_order if joint_names is None or name in joint_names]
+        names = [
+            name
+            for name in cls.arm_joint_order
+            if joint_names is None or name in joint_names
+        ]
         goal_joint_state = JointState()
         if stamp is not None:
             goal_joint_state.header.stamp = stamp
@@ -132,10 +141,8 @@ class VerifyInitPoseNode(Node):
     def joint_state_callback(self, msg: JointState):
         if self.pose_verified:
             return
-        
+
         arm_position_by_name = self.arm_joint_position_map(msg)
-        arm_joint_names = list(arm_position_by_name.keys())
-        
         # Ensure we got exactly 6 arm joints
         if len(arm_position_by_name) != len(self.arm_joint_order):
             self.get_logger().debug(
@@ -145,7 +152,7 @@ class VerifyInitPoseNode(Node):
             return
 
         self.latest_arm_position_by_name = arm_position_by_name
-        
+
         # Check if current pose matches expected pose
         errors = [
             abs(self._angle_error(arm_position_by_name[name], self.expected_joint_by_name[name]))
@@ -169,15 +176,23 @@ class VerifyInitPoseNode(Node):
 
             self.get_logger().warn("Current joint positions do not match expected initial pose.")
             self.get_logger().info(f"Joint order: {self.arm_joint_order}")
+            expected_text = [
+                f"{self.expected_joint_by_name[name]:.4f}"
+                for name in self.arm_joint_order
+            ]
+            current_text = [
+                f"{arm_position_by_name[name]:.4f}"
+                for name in self.arm_joint_order
+            ]
             self.get_logger().info(
-                f"Expected: {[f'{self.expected_joint_by_name[name]:.4f}' for name in self.arm_joint_order]}"
+                f"Expected: {expected_text}"
             )
             self.get_logger().info(
-                f"Current:  {[f'{arm_position_by_name[name]:.4f}' for name in self.arm_joint_order]}"
+                f"Current:  {current_text}"
             )
             self.get_logger().info(f"Error:    {[f'{error:.4f}' for error in errors]}")
             self.get_logger().info("Sending move_to_joint command...")
-            
+
             # Use correct API: move_to_joint with JointState object
             self.is_moving = True
             self.motion_done = False
@@ -187,10 +202,10 @@ class VerifyInitPoseNode(Node):
                 self.arm_joint_order,
                 self.get_clock().now().to_msg(),
             )
-            
+
             # Run in a separate thread to avoid blocking callbacks
             self._start_worker(self._move_to_joint_thread, goal_joint_state)
-    
+
     def _move_to_joint_thread(self, goal_joint_state: JointState):
         """Execute move command in separate thread to avoid callback blocking"""
         try:
@@ -222,7 +237,10 @@ class VerifyInitPoseNode(Node):
 
             self.get_logger().info("Move to initial pose completed!")
             self.motion_done = True
-            self.get_logger().info("Waiting for /joint_states to confirm initial pose before continuing.")
+            self.get_logger().info(
+                "Waiting for /joint_states to confirm initial pose "
+                "before continuing."
+            )
         except Exception as e:
             self.get_logger().error(f"Exception in move_to_joint: {e}")
             self.is_moving = False
@@ -274,7 +292,7 @@ class VerifyInitPoseNode(Node):
                 thread.join(timeout=0.2)
         return super().destroy_node()
 
-            
+
 def main(args=None):
     rclpy.init(args=args)
     node = VerifyInitPoseNode()
@@ -284,6 +302,7 @@ def main(args=None):
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
-            
+
+
 if __name__ == "__main__":
     main()

@@ -25,9 +25,7 @@ and uses Hydra for configuration management.
 
    ```bash
    conda deactivate
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
+python3 -m pip install --user -r /home/ws/requirements.txt
    ```
 
    Make sure to set the MUJOCO_GL environment variable to egl to improve rendering performance, especially if you have a compatible GPU:

@@ -22,13 +22,23 @@ from message_filters import Subscriber, ApproximateTimeSynchronizer
 import numpy as np
 
 from my_course_pkg.paths import RGBD_FRAME_DIR
+from my_course_pkg.perception.camera import camera_matrix
 
 
 class RGBDPerceptionNode(Node):
     """RGB-D perception node — caches the latest aligned frame."""
 
-    def __init__(self, node_name: str = 'rgbd_perception_node'):
+    def __init__(
+        self,
+        node_name: str = 'rgbd_perception_node',
+        auto_save: bool = True,
+        sync_slop_s: float = 0.10,
+    ):
         super().__init__(node_name)
+        self.auto_save = bool(auto_save)
+        self.sync_slop_s = float(sync_slop_s)
+        if not math.isfinite(self.sync_slop_s) or self.sync_slop_s <= 0.0:
+            raise ValueError("sync_slop_s must be finite and positive.")
         self.cbg = ReentrantCallbackGroup()
         self.bridge = CvBridge()
 
@@ -37,9 +47,12 @@ class RGBDPerceptionNode(Node):
         self.sync = ApproximateTimeSynchronizer(
             [self.rgb_sub, self.depth_sub],
             queue_size=5,
-            slop=1.0,
+            slop=self.sync_slop_s,
         )
         self.sync.registerCallback(self.rgbd_callback)
+        self.get_logger().info(
+            f"RGB-D synchronization tolerance: {self.sync_slop_s:.3f}s"
+        )
 
         self.lock = threading.Lock()
         self._latest_rgb = None       # np.ndarray (H, W, 3)
@@ -49,35 +62,32 @@ class RGBDPerceptionNode(Node):
 
         self._init_camera_intrinsic()
 
-
-    def _init_camera_intrinsic(self):
-        width = 1280
-        height = 720
-        fovy_deg = 51.38
-        fovy_rad = math.radians(fovy_deg)
-        cx = width / 2.0
-        cy = height / 2.0
-        fy = (height / 2.0) / math.tan(fovy_rad / 2.0)
-        fx = fy                     
-
-        self.K = np.array([
-            [fx, 0, cx],
-            [0, fy, cy],
-            [0,  0,  1],
-        ], dtype=np.float32)
+    def _init_camera_intrinsic(self, width=1280, height=720):
+        calibration = camera_matrix(width, height)
+        self.K = calibration.astype(np.float32)
+        # Keep the historic full-precision scalar attributes while K remains
+        # float32 for the ROS image-processing path.
+        fx = float(calibration[0, 0])
+        fy = float(calibration[1, 1])
+        cx = float(calibration[0, 2])
+        cy = float(calibration[1, 2])
 
         self.fx, self.fy = fx, fy
         self.cx, self.cy = cx, cy
         self.get_logger().info(
             f'Camera intrinsics: fx={fx:.1f} fy={fy:.1f} '
-            f'cx={cx:.1f} cy={cy:.1f}'
+            f'cx={cx:.1f} cy={cy:.1f} size={width}x{height}'
         )
-
 
     def rgbd_callback(self, rgb_msg: Image, depth_msg: Image):
         rgb = self.bridge.imgmsg_to_cv2(rgb_msg, desired_encoding='rgb8')
         depth = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='32FC1')
         ts = rgb_msg.header.stamp.sec + rgb_msg.header.stamp.nanosec * 1e-9
+        if (
+            int(round(self.cx * 2.0)) != rgb.shape[1]
+            or int(round(self.cy * 2.0)) != rgb.shape[0]
+        ):
+            self._init_camera_intrinsic(rgb.shape[1], rgb.shape[0])
 
         with self.lock:
             self._latest_rgb = rgb.copy()
@@ -92,10 +102,8 @@ class RGBDPerceptionNode(Node):
             )
 
         # Auto-save every 20 frames (~1 Hz) so the latest frame is always on disk
-        if self._frame_count % 20 == 0:
+        if self.auto_save and self._frame_count % 20 == 0:
             self.save_current_frame()
-
-
 
     def get_latest_rgbd(self):
         """Return a deep copy of (rgb, depth, timestamp), or (None,None,0.0)."""
@@ -107,6 +115,7 @@ class RGBDPerceptionNode(Node):
                 self._latest_depth.copy(),
                 self._latest_stamp,
             )
+
     def save_current_frame(self, save_dir: str | os.PathLike | None = None):
         """
         Save the latest cached RGB-D frame.
@@ -186,6 +195,7 @@ class RGBDPerceptionNode(Node):
 
 # Backward-compatible name for pipeline-style imports.
 RgbdFileSaveNode = RGBDPerceptionNode
+
 
 def main(args=None):
     rclpy.init(args=args)

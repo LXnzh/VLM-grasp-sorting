@@ -61,5 +61,5 @@
        "source=/usr/src,target=/usr/src,type=bind,consistency=cached",
        "source=/lib/modules,target=/lib/modules,type=bind,consistency=cached"
     ],
-    "postCreateCommand": "sudo apt update && sudo rosdep update && sudo rosdep install -r --from-paths src --ignore-src -y && sudo chown -R $(whoami) /home/ws/ && chmod +x /home/ws/*.bash"
+    "postCreateCommand": "sudo apt update && sudo rosdep update && sudo rosdep install -r --from-paths src --ignore-src -y && python3 -m pip install --user -r /home/ws/requirements.txt && sudo chown -R $(whoami) /home/ws/ && chmod +x /home/ws/*.bash"
 }

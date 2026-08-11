@@ -1,5 +1,4 @@
 import os
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 import numpy as np
@@ -424,6 +423,8 @@ SIDE_GRASP_APPROACH_CLEARANCE_MARGIN_M = env_float(
     "GRASP_SIDE_APPROACH_CLEARANCE_MARGIN_M",
     "0.03",
 )
+
+
 def read_side_grasp_approach_vertical_margin_m():
     return env_float("GRASP_SIDE_APPROACH_VERTICAL_MARGIN_M", "0.12")
 
@@ -448,7 +449,6 @@ SIDE_GRASP_SYMMETRY_CENTER_XY_BY_OBJECT = {
     # expansion must rotate candidate poses about the cylinder axis, otherwise
     # 90/180/270 deg copies are translated far away from the can.
     "tomato_soup_can": np.array([-0.0091685, 0.0840175], dtype=float),
-    "tuna_fish_can": np.array([-0.0260485, -0.0221320], dtype=float),
 }
 DROP_POSITION = read_drop_position()
 DROP_RELEASE_Z_OFFSET = env_float("GRASP_DROP_RELEASE_Z_OFFSET", "0.0")
@@ -512,8 +512,6 @@ SIDE_DROP_OFFSET = np.array(
 
 YCB_GRASP_NAME_MAP = {
     "tomato_soup_can": "005_tomato_soup_can",
-    "tuna_fish_can": "007_tuna_fish_can",
-    "pudding_box": "008_pudding_box",
     "gelatin_box": "009_gelatin_box",
     "banana": "011_banana",
     "apple": "013_apple",
@@ -532,7 +530,6 @@ YCB_GRASP_NAME_MAP = {
 }
 
 VERTICAL_GRASP_OBJECTS = {
-    "pudding_box",
     "gelatin_box",
     "sponge",
     "foam_brick",
@@ -540,13 +537,11 @@ VERTICAL_GRASP_OBJECTS = {
 }
 SIDE_GRASP_OBJECTS = {
     "tomato_soup_can",
-    "tuna_fish_can",
 }
 SIDE_GRASP_GEOMETRY_CENTER_BY_OBJECT = {
     # YCB can meshes are not centered at the object origin. Side-grasp
     # centerline checks should use the visible cylinder center instead.
     "tomato_soup_can": np.array([-0.009169, 0.084018, 0.051006], dtype=float),
-    "tuna_fish_can": np.array([-0.026049, -0.022132, 0.013551], dtype=float),
 }
 TABLETOP_CANONICAL_OBJECTS = {
     # The YCB can grasp library uses object-local +Z as the cylinder height.
@@ -583,15 +578,42 @@ GRASP_PROFILE_BY_OBJECT = {
 }
 
 OBJECT_GEOMETRY_BY_NAME = {
-    "apple": {"center": [0.000859, -0.003784, 0.035552], "bbox_size": [0.075448, 0.074871, 0.071889]},
-    "lemon": {"center": [-0.010579, 0.021654, 0.026274], "bbox_size": [0.060588, 0.059299, 0.053017]},
-    "peach": {"center": [-0.014270, 0.005633, 0.029108], "bbox_size": [0.062123, 0.062632, 0.058645]},
-    "pear": {"center": [-0.033320, 0.017995, 0.032652], "bbox_size": [0.066546, 0.100455, 0.065663]},
-    "orange": {"center": [-0.006935, -0.018360, 0.035428], "bbox_size": [0.072158, 0.073986, 0.071352]},
-    "plum": {"center": [-0.007818, 0.019424, 0.026223], "bbox_size": [0.057190, 0.054941, 0.053040]},
-    "baseball": {"center": [-0.010081, -0.048245, 0.036077], "bbox_size": [0.073078, 0.073712, 0.072563]},
-    "tennis_ball": {"center": [0.008212, -0.044278, 0.033132], "bbox_size": [0.066975, 0.067030, 0.066457]},
-    "racquetball": {"center": [-0.009053, -0.122232, 0.027596], "bbox_size": [0.055778, 0.056056, 0.055574]},
+    "apple": {
+        "center": [0.000859, -0.003784, 0.035552],
+        "bbox_size": [0.075448, 0.074871, 0.071889],
+    },
+    "lemon": {
+        "center": [-0.010579, 0.021654, 0.026274],
+        "bbox_size": [0.060588, 0.059299, 0.053017],
+    },
+    "peach": {
+        "center": [-0.014270, 0.005633, 0.029108],
+        "bbox_size": [0.062123, 0.062632, 0.058645],
+    },
+    "pear": {
+        "center": [-0.033320, 0.017995, 0.032652],
+        "bbox_size": [0.066546, 0.100455, 0.065663],
+    },
+    "orange": {
+        "center": [-0.006935, -0.018360, 0.035428],
+        "bbox_size": [0.072158, 0.073986, 0.071352],
+    },
+    "plum": {
+        "center": [-0.007818, 0.019424, 0.026223],
+        "bbox_size": [0.057190, 0.054941, 0.053040],
+    },
+    "baseball": {
+        "center": [-0.010081, -0.048245, 0.036077],
+        "bbox_size": [0.073078, 0.073712, 0.072563],
+    },
+    "tennis_ball": {
+        "center": [0.008212, -0.044278, 0.033132],
+        "bbox_size": [0.066975, 0.067030, 0.066457],
+    },
+    "racquetball": {
+        "center": [-0.009053, -0.122232, 0.027596],
+        "bbox_size": [0.055778, 0.056056, 0.055574],
+    },
 }
 ROUND_TOP_MAX_APPROACH_ANGLE_DEG = env_float("GRASP_ROUND_TOP_MAX_APPROACH_ANGLE_DEG", "20.0")
 ROUND_TOP_SYMMETRY_YAW_DEG = tuple(range(0, 360, 45))
@@ -600,7 +622,8 @@ ROUND_TOP_MIN_NORMALIZED_HEIGHT = env_float("GRASP_ROUND_TOP_MIN_NORMALIZED_HEIG
 ROUND_TOP_MAX_NORMALIZED_HEIGHT = env_float("GRASP_ROUND_TOP_MAX_NORMALIZED_HEIGHT", "0.20")
 ROUND_TOP_TARGET_NORMALIZED_HEIGHT = env_float("GRASP_ROUND_TOP_TARGET_NORMALIZED_HEIGHT", "0.08")
 ROUND_TOP_MAX_GRIPPER_OPENING_M = env_float("GRASP_ROUND_TOP_MAX_GRIPPER_OPENING_M", "0.08516")
-ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M = env_float("GRASP_ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M", "-0.104")
+ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M = env_float(
+    "GRASP_ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M", "-0.104")
 ROUND_TOP_TABLE_CLEARANCE_M = env_float("GRASP_ROUND_TOP_TABLE_CLEARANCE_M", "0.005")
 ROUND_TOP_CANDIDATE_COUNT = max(1, env_int("GRASP_ROUND_TOP_CANDIDATE_COUNT", "8"))
 ROUND_TOP_CLEARANCE_ENABLED = env_bool("GRASP_ROUND_TOP_CLEARANCE_ENABLED", True)
@@ -644,301 +667,3 @@ ROUND_TOP_APPROACH_VERTICAL_MARGIN_M = env_float(
     # Covers the measured 0.104 m TCP-to-lowest-finger reach plus margin.
     "0.12",
 )
-
-
-# Exact-name Tuna configuration is intentionally lazy.  Importing this module
-# for another object must not read or validate any GRASP_TUNA_* variable.
-TUNA_RADIAL_DIRECTION_COUNT = 4
-TUNA_CONTACT_HEIGHTS_M = (0.008, 0.009, 0.010)
-TUNA_TOOL_Z_ANGLES_TO_HORIZONTAL_DEG = (35.0, 40.0, 45.0)
-TUNA_APPROACH_DIST_M = 0.100
-TUNA_INITIAL_BOUNDS_STABILITY_TOLERANCE_M = 0.002
-TUNA_PRECLAMP_BOUNDS_TOLERANCE_M = 0.002
-TUNA_BOUNDS_TOLERANCE_M = 0.005
-TUNA_MIN_TABLE_CLEARANCE_M = 0.005
-TUNA_CALIBRATION_MAX_INTERPOLATION_ERROR_M = 0.00025
-TUNA_PRECLAMP_POSITION = None
-TUNA_MIN_CONTACT_DEFLECTION_M = 0.0005
-TUNA_QPOS_STABILITY_TOLERANCE_RAD = 0.002
-TUNA_SETPOINT_HYSTERESIS_TOLERANCE_M = 0.0005
-TUNA_PIVOT_APERTURE_DRIFT_TOLERANCE_M = 0.0005
-TUNA_RETENTION_APERTURE_DRIFT_TOLERANCE_M = 0.0005
-TUNA_ROLL_MICROSEGMENT_MAX_ANGLE_DEG = 2.5
-TUNA_LIFT_MICROSEGMENT_MAX_TRANSLATION_M = 0.010
-TUNA_LIFT_FOLLOW_TOLERANCE_M = 0.002
-TUNA_ROLL_CHECKPOINT_ANGLES_DEG = (10.0, 20.0, 30.0)
-TUNA_MIN_STRADDLE_MARGIN_M = 0.001
-TUNA_TEST_LIFT_M = 0.030
-TUNA_LIFT_OBSERVATION_SPACING_M = 0.050
-# This replaces the design phrase "brief hold" with an executable duration.
-TUNA_POST_CLOSE_HOLD_SEC = 0.5
-# A Tuna plan computes and logs its command budget and fails before motion if
-# it exceeds this cap.  Overrides can reduce, but never enlarge, the cap.
-TUNA_MAX_PHYSICAL_COMMANDS = 96
-TUNA_DEBUG_STOP_AFTER = "generation"
-TUNA_DEBUG_STOP_STAGES = frozenset(
-    {
-        "generation",
-        "pregrasp",
-        "contact_support",
-        "preclamp",
-        "roll_segment_1",
-        "roll_segment_2",
-        "roll_segment_3",
-        "close",
-        "test_lift",
-        "normal_lift",
-        "none",
-    }
-)
-
-
-def _read_tuna_float(name, default):
-    raw_value = os.environ.get(name, str(default))
-    try:
-        value = float(raw_value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be a finite number; got {raw_value!r}.") from exc
-    if not np.isfinite(value):
-        raise ValueError(f"{name} must be a finite number; got {value!r}.")
-    return value
-
-
-def _read_tuna_positive(name, default):
-    value = _read_tuna_float(name, default)
-    if value <= 0.0:
-        raise ValueError(f"{name} must be strictly positive; got {value!r}.")
-    return value
-
-
-def _read_tuna_at_most(name, default, maximum):
-    value = _read_tuna_positive(name, default)
-    if value > maximum:
-        raise ValueError(
-            f"{name} may tighten but not exceed {maximum!r}; got {value!r}."
-        )
-    return value
-
-
-def _read_tuna_at_least(name, default, minimum):
-    value = _read_tuna_positive(name, default)
-    if value < minimum:
-        raise ValueError(
-            f"{name} may tighten but not fall below {minimum!r}; got {value!r}."
-        )
-    return value
-
-
-def _read_tuna_exact_csv(name, default):
-    raw_value = os.environ.get(name, ",".join(str(item) for item in default))
-    try:
-        values = tuple(float(item.strip()) for item in raw_value.split(","))
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must equal {default!r}; got {raw_value!r}.") from exc
-    if (
-        len(values) != len(default)
-        or not np.isfinite(values).all()
-        or not np.allclose(values, default, rtol=0.0, atol=1e-12)
-    ):
-        raise ValueError(f"{name} must equal {default!r}; got {values!r}.")
-    return tuple(float(item) for item in values)
-
-
-def _read_tuna_preclamp_position():
-    raw_value = os.environ.get("GRASP_TUNA_PRECLAMP_POSITION")
-    if raw_value is None:
-        return None
-    value = _read_tuna_float("GRASP_TUNA_PRECLAMP_POSITION", raw_value)
-    if not GRIPPER_OPEN_POSITION < value < GRIPPER_CLOSED_POSITION:
-        raise ValueError(
-            "GRASP_TUNA_PRECLAMP_POSITION must be strictly between the shared "
-            f"open and closed commands; got {value!r}."
-        )
-    return value
-
-
-@dataclass(frozen=True)
-class TunaConfig:
-    radial_direction_count: int
-    contact_heights_m: tuple[float, ...]
-    tool_z_angles_to_horizontal_deg: tuple[float, ...]
-    approach_dist_m: float
-    initial_bounds_stability_tolerance_m: float
-    preclamp_bounds_tolerance_m: float
-    bounds_tolerance_m: float
-    min_table_clearance_m: float
-    calibration_max_interpolation_error_m: float
-    preclamp_position: float | None
-    min_contact_deflection_m: float
-    qpos_stability_tolerance_rad: float
-    setpoint_hysteresis_tolerance_m: float
-    pivot_aperture_drift_tolerance_m: float
-    retention_aperture_drift_tolerance_m: float
-    roll_microsegment_max_angle_deg: float
-    lift_microsegment_max_translation_m: float
-    lift_follow_tolerance_m: float
-    roll_checkpoint_angles_deg: tuple[float, ...]
-    min_straddle_margin_m: float
-    test_lift_m: float
-    lift_observation_spacing_m: float
-    post_close_hold_sec: float
-    max_physical_commands: int
-    debug_stop_after: str
-
-
-def read_tuna_config():
-    """Read exact-name Tuna settings without affecting other object paths."""
-    raw_radial_count = os.environ.get(
-        "GRASP_TUNA_RADIAL_DIRECTION_COUNT",
-        str(TUNA_RADIAL_DIRECTION_COUNT),
-    )
-    try:
-        radial_direction_count = int(raw_radial_count)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "GRASP_TUNA_RADIAL_DIRECTION_COUNT must be exactly 4 or 8; "
-            f"got {raw_radial_count!r}."
-        ) from exc
-    if radial_direction_count not in {4, 8}:
-        raise ValueError(
-            "GRASP_TUNA_RADIAL_DIRECTION_COUNT must be exactly 4 or 8; "
-            f"got {radial_direction_count!r}."
-        )
-
-    raw_command_cap = os.environ.get(
-        "GRASP_TUNA_MAX_PHYSICAL_COMMANDS",
-        str(TUNA_MAX_PHYSICAL_COMMANDS),
-    )
-    try:
-        max_physical_commands = int(raw_command_cap)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "GRASP_TUNA_MAX_PHYSICAL_COMMANDS must be an integer in "
-            f"[1, {TUNA_MAX_PHYSICAL_COMMANDS}]; got {raw_command_cap!r}."
-        ) from exc
-    if not 1 <= max_physical_commands <= TUNA_MAX_PHYSICAL_COMMANDS:
-        raise ValueError(
-            "GRASP_TUNA_MAX_PHYSICAL_COMMANDS must be an integer in "
-            f"[1, {TUNA_MAX_PHYSICAL_COMMANDS}]; got {max_physical_commands!r}."
-        )
-
-    debug_stop_after = os.environ.get(
-        "GRASP_TUNA_DEBUG_STOP_AFTER",
-        TUNA_DEBUG_STOP_AFTER,
-    ).strip().lower()
-    if debug_stop_after not in TUNA_DEBUG_STOP_STAGES:
-        valid = ", ".join(sorted(TUNA_DEBUG_STOP_STAGES))
-        raise ValueError(
-            "GRASP_TUNA_DEBUG_STOP_AFTER must be one of "
-            f"{valid}; got {debug_stop_after!r}."
-        )
-
-    test_lift_m = _read_tuna_positive("GRASP_TUNA_TEST_LIFT_M", TUNA_TEST_LIFT_M)
-    if not np.isclose(test_lift_m, TUNA_TEST_LIFT_M, rtol=0.0, atol=1e-12):
-        raise ValueError(
-            "GRASP_TUNA_TEST_LIFT_M is fixed at 0.030 m for the qualified "
-            f"first patch; got {test_lift_m!r}."
-        )
-
-    return TunaConfig(
-        radial_direction_count=radial_direction_count,
-        contact_heights_m=_read_tuna_exact_csv(
-            "GRASP_TUNA_CONTACT_HEIGHTS_M",
-            TUNA_CONTACT_HEIGHTS_M,
-        ),
-        tool_z_angles_to_horizontal_deg=_read_tuna_exact_csv(
-            "GRASP_TUNA_TOOL_Z_ANGLES_TO_HORIZONTAL_DEG",
-            TUNA_TOOL_Z_ANGLES_TO_HORIZONTAL_DEG,
-        ),
-        approach_dist_m=_read_tuna_positive(
-            "GRASP_TUNA_APPROACH_DIST_M",
-            TUNA_APPROACH_DIST_M,
-        ),
-        initial_bounds_stability_tolerance_m=_read_tuna_at_most(
-            "GRASP_TUNA_INITIAL_BOUNDS_STABILITY_TOLERANCE_M",
-            TUNA_INITIAL_BOUNDS_STABILITY_TOLERANCE_M,
-            TUNA_INITIAL_BOUNDS_STABILITY_TOLERANCE_M,
-        ),
-        preclamp_bounds_tolerance_m=_read_tuna_at_most(
-            "GRASP_TUNA_PRECLAMP_BOUNDS_TOLERANCE_M",
-            TUNA_PRECLAMP_BOUNDS_TOLERANCE_M,
-            TUNA_PRECLAMP_BOUNDS_TOLERANCE_M,
-        ),
-        bounds_tolerance_m=_read_tuna_at_most(
-            "GRASP_TUNA_BOUNDS_TOLERANCE_M",
-            TUNA_BOUNDS_TOLERANCE_M,
-            TUNA_BOUNDS_TOLERANCE_M,
-        ),
-        min_table_clearance_m=_read_tuna_at_least(
-            "GRASP_TUNA_MIN_TABLE_CLEARANCE_M",
-            TUNA_MIN_TABLE_CLEARANCE_M,
-            TUNA_MIN_TABLE_CLEARANCE_M,
-        ),
-        calibration_max_interpolation_error_m=_read_tuna_at_most(
-            "GRASP_TUNA_CALIBRATION_MAX_INTERPOLATION_ERROR_M",
-            TUNA_CALIBRATION_MAX_INTERPOLATION_ERROR_M,
-            TUNA_CALIBRATION_MAX_INTERPOLATION_ERROR_M,
-        ),
-        preclamp_position=_read_tuna_preclamp_position(),
-        min_contact_deflection_m=_read_tuna_at_least(
-            "GRASP_TUNA_MIN_CONTACT_DEFLECTION_M",
-            TUNA_MIN_CONTACT_DEFLECTION_M,
-            TUNA_MIN_CONTACT_DEFLECTION_M,
-        ),
-        qpos_stability_tolerance_rad=_read_tuna_at_most(
-            "GRASP_TUNA_QPOS_STABILITY_TOLERANCE_RAD",
-            TUNA_QPOS_STABILITY_TOLERANCE_RAD,
-            TUNA_QPOS_STABILITY_TOLERANCE_RAD,
-        ),
-        setpoint_hysteresis_tolerance_m=_read_tuna_at_most(
-            "GRASP_TUNA_SETPOINT_HYSTERESIS_TOLERANCE_M",
-            TUNA_SETPOINT_HYSTERESIS_TOLERANCE_M,
-            TUNA_SETPOINT_HYSTERESIS_TOLERANCE_M,
-        ),
-        pivot_aperture_drift_tolerance_m=_read_tuna_at_most(
-            "GRASP_TUNA_PIVOT_APERTURE_DRIFT_TOLERANCE_M",
-            TUNA_PIVOT_APERTURE_DRIFT_TOLERANCE_M,
-            TUNA_PIVOT_APERTURE_DRIFT_TOLERANCE_M,
-        ),
-        retention_aperture_drift_tolerance_m=_read_tuna_at_most(
-            "GRASP_TUNA_RETENTION_APERTURE_DRIFT_TOLERANCE_M",
-            TUNA_RETENTION_APERTURE_DRIFT_TOLERANCE_M,
-            TUNA_RETENTION_APERTURE_DRIFT_TOLERANCE_M,
-        ),
-        roll_microsegment_max_angle_deg=_read_tuna_at_most(
-            "GRASP_TUNA_ROLL_MICROSEGMENT_MAX_ANGLE_DEG",
-            TUNA_ROLL_MICROSEGMENT_MAX_ANGLE_DEG,
-            TUNA_ROLL_MICROSEGMENT_MAX_ANGLE_DEG,
-        ),
-        lift_microsegment_max_translation_m=_read_tuna_at_most(
-            "GRASP_TUNA_LIFT_MICROSEGMENT_MAX_TRANSLATION_M",
-            TUNA_LIFT_MICROSEGMENT_MAX_TRANSLATION_M,
-            TUNA_LIFT_MICROSEGMENT_MAX_TRANSLATION_M,
-        ),
-        lift_follow_tolerance_m=_read_tuna_at_most(
-            "GRASP_TUNA_LIFT_FOLLOW_TOLERANCE_M",
-            TUNA_LIFT_FOLLOW_TOLERANCE_M,
-            TUNA_LIFT_FOLLOW_TOLERANCE_M,
-        ),
-        roll_checkpoint_angles_deg=_read_tuna_exact_csv(
-            "GRASP_TUNA_ROLL_CHECKPOINT_ANGLES_DEG",
-            TUNA_ROLL_CHECKPOINT_ANGLES_DEG,
-        ),
-        min_straddle_margin_m=_read_tuna_at_least(
-            "GRASP_TUNA_MIN_STRADDLE_MARGIN_M",
-            TUNA_MIN_STRADDLE_MARGIN_M,
-            TUNA_MIN_STRADDLE_MARGIN_M,
-        ),
-        test_lift_m=test_lift_m,
-        lift_observation_spacing_m=_read_tuna_at_most(
-            "GRASP_TUNA_LIFT_OBSERVATION_SPACING_M",
-            TUNA_LIFT_OBSERVATION_SPACING_M,
-            TUNA_LIFT_OBSERVATION_SPACING_M,
-        ),
-        post_close_hold_sec=_read_tuna_positive(
-            "GRASP_TUNA_POST_CLOSE_HOLD_SEC",
-            TUNA_POST_CLOSE_HOLD_SEC,
-        ),
-        max_physical_commands=max_physical_commands,
-        debug_stop_after=debug_stop_after,
-    )

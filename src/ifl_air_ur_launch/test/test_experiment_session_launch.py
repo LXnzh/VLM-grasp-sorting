@@ -90,12 +90,14 @@ def test_full_launch_defaults_to_embedded_interface_and_watchdog():
     interface_arg = _declared_argument(module, "launch_moveit_iface")
     watchdog_arg = _declared_argument(module, "launch_servo_watchdog")
     quiet_output_arg = _declared_argument(module, "quiet_runtime_output")
+    sim_headless_arg = _declared_argument(module, "sim_headless")
     robot_rviz_arg = _declared_argument(module, "launch_robot_rviz")
     moveit_rviz_arg = _declared_argument(module, "launch_moveit_rviz")
 
     assert _argument_default_text(interface_arg).lower() == "true"
     assert _argument_default_text(watchdog_arg).lower() == "true"
     assert _argument_default_text(quiet_output_arg).lower() == "false"
+    assert _argument_default_text(sim_headless_arg).lower() == "false"
     assert _argument_default_text(robot_rviz_arg).lower() == "false"
     assert _argument_default_text(moveit_rviz_arg).lower() == "true"
 

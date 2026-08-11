@@ -1,0 +1,6 @@
+-r src/ifl_air_mujoco_sim/requirements.txt
+
+openai>=1.0
+Pillow
+pycocotools
+requests

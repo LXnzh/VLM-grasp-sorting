@@ -1,10 +1,12 @@
 import os
+import colorsys
 import xml.etree.ElementTree as ET
 import random
 import math
 import numpy as np
 from env.utils.xml_utils import resolve_includes, resolve_all_file_paths
 from env.utils.scene_clearance_bounds import load_obj_vertices
+from env.utils.sorting_scene import validate_sorting_layout
 from env.utils.ycb_assets import resolve_ycb_assets
 
 
@@ -102,6 +104,140 @@ def create_object_xml(obj_config):
     joint = ET.SubElement(body, 'joint', name=f"{name}_joint", type="free")
 
     return body
+
+
+def _classification_bin_body(bin_config, center_xy, table_surface_z):
+    """Build one static open-top bin from a floor and four box walls."""
+    name = str(bin_config["name"])
+    inner_size = np.asarray(
+        bin_config.get("inner_size", [0.24, 0.20]),
+        dtype=float,
+    )
+    wall_height = float(bin_config.get("wall_height", 0.10))
+    wall_thickness = float(bin_config.get("wall_thickness", 0.01))
+    floor_thickness = float(bin_config.get("floor_thickness", 0.01))
+    color = np.asarray(
+        bin_config.get("color", [0.3, 0.3, 0.3, 1.0]),
+        dtype=float,
+    )
+    if inner_size.shape != (2,) or np.any(inner_size <= 0.0):
+        raise ValueError(
+            f"Classification bin {name!r} needs positive inner_size [x, y]."
+        )
+    if min(wall_height, wall_thickness, floor_thickness) <= 0.0:
+        raise ValueError(
+            f"Classification bin {name!r} dimensions must be positive."
+        )
+    if color.shape != (4,) or np.any((color < 0.0) | (color > 1.0)):
+        raise ValueError(
+            f"Classification bin {name!r} color must be four values in [0, 1]."
+        )
+
+    half_x, half_y = inner_size / 2.0
+    body = ET.Element(
+        "body",
+        name=name,
+        pos=f"{center_xy[0]} {center_xy[1]} {table_surface_z}",
+    )
+
+    def add_geom(suffix, pos, size):
+        ET.SubElement(
+            body,
+            "geom",
+            name=f"{name}_{suffix}",
+            type="box",
+            pos=" ".join(str(value) for value in pos),
+            size=" ".join(str(value) for value in size),
+            rgba=" ".join(str(value) for value in color),
+            friction="0.9 0.2 0.05",
+            contype="1",
+            conaffinity="1",
+        )
+
+    add_geom(
+        "floor",
+        [0.0, 0.0, floor_thickness / 2.0],
+        [half_x + wall_thickness, half_y + wall_thickness,
+         floor_thickness / 2.0],
+    )
+    wall_z = floor_thickness + wall_height / 2.0
+    add_geom(
+        "wall_x_pos",
+        [half_x + wall_thickness / 2.0, 0.0, wall_z],
+        [wall_thickness / 2.0, half_y + wall_thickness,
+         wall_height / 2.0],
+    )
+    add_geom(
+        "wall_x_neg",
+        [-half_x - wall_thickness / 2.0, 0.0, wall_z],
+        [wall_thickness / 2.0, half_y + wall_thickness,
+         wall_height / 2.0],
+    )
+    add_geom(
+        "wall_y_pos",
+        [0.0, half_y + wall_thickness / 2.0, wall_z],
+        [half_x, wall_thickness / 2.0, wall_height / 2.0],
+    )
+    add_geom(
+        "wall_y_neg",
+        [0.0, -half_y - wall_thickness / 2.0, wall_z],
+        [half_x, wall_thickness / 2.0, wall_height / 2.0],
+    )
+    return body
+
+
+def add_classification_bins(
+    worldbody,
+    classification_bins,
+    table_surface_z=-0.025,
+    rng=random,
+):
+    """Add the configured randomized food bin to the canonical scene."""
+    if not classification_bins or not classification_bins.get("enabled", False):
+        return None
+    bins = list(classification_bins.get("bins", []))
+    if len(bins) != 1 or str(bins[0].get("category", "")) != "food":
+        raise ValueError(
+            "Sorting mode requires exactly one classification bin for 'food'."
+        )
+    position_range = classification_bins.get("position_range", {})
+    x_range = np.asarray(position_range.get("x", ()), dtype=float)
+    y_range = np.asarray(position_range.get("y", ()), dtype=float)
+    if (
+        x_range.shape != (2,)
+        or y_range.shape != (2,)
+        or x_range[0] > x_range[1]
+        or y_range[0] > y_range[1]
+    ):
+        raise ValueError(
+            "classification_bins.position_range needs ordered x/y pairs."
+        )
+
+    bin_config = dict(bins[0])
+    bin_config.setdefault("color", [0.3, 0.3, 0.3, 1.0])
+    center_xy = [
+        rng.uniform(float(x_range[0]), float(x_range[1])),
+        rng.uniform(float(y_range[0]), float(y_range[1])),
+    ]
+    if bool(classification_bins.get("random_color", False)):
+        rgb = colorsys.hsv_to_rgb(
+            rng.uniform(0.0, 1.0),
+            rng.uniform(0.75, 1.0),
+            rng.uniform(0.75, 1.0),
+        )
+        bin_config["color"] = [*rgb, 1.0]
+    worldbody.append(
+        _classification_bin_body(bin_config, center_xy, table_surface_z)
+    )
+    print(
+        f"[INFO] Added food_bin at [{center_xy[0]:.3f}, "
+        f"{center_xy[1]:.3f}, {table_surface_z:.3f}]"
+    )
+    return {
+        "name": str(bin_config["name"]),
+        "center_xy": center_xy,
+        "color": list(bin_config["color"]),
+    }
 
 
 def _euler_to_rotation_matrix(euler):
@@ -503,7 +639,7 @@ def assign_placement_slots(objects_config, placement_slots):
 
 def populate_scene(model_path, objects_config=None, camera_names=[],
                    random_object_count=0, fixed_object_names=None,
-                   table_surface_z=-0.025):
+                   table_surface_z=-0.025, classification_bins=None):
     """ Populate the MuJoCo scene with objects defined in the configuration.
 
     Parse the XML model, add objects, and return the modified XML as a string.
@@ -531,6 +667,13 @@ def populate_scene(model_path, objects_config=None, camera_names=[],
     worldbody = root.find('worldbody')
     if worldbody is None:
         raise ValueError("No worldbody found in XML model")
+
+    validate_sorting_layout(objects_config, classification_bins)
+    add_classification_bins(
+        worldbody,
+        classification_bins,
+        table_surface_z=table_surface_z,
+    )
 
     # Add objects to the scene if provided
     if objects_config:

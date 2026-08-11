@@ -57,7 +57,7 @@ def test_llm_sam2_alias_uses_blue_ball_prompt_and_writes_audit_metadata(
 ):
     captured = {}
 
-    def fail_vlm_selection(_img_path, _instruction):
+    def fail_vlm_selection(_img_path, _prompt, _label):
         raise AssertionError("fixed alias must bypass VLM target selection")
 
     def fake_sam2_api(img_path, text_prompt):
@@ -66,8 +66,17 @@ def test_llm_sam2_alias_uses_blue_ball_prompt_and_writes_audit_metadata(
         return {"annotations": []}
 
     monkeypatch.delenv("VLM_CANDIDATE_OVERRIDE", raising=False)
-    monkeypatch.setattr(llm_sam2, "vlm_select_candidates", fail_vlm_selection)
+    monkeypatch.setattr(llm_sam2, "_run_vlm_json", fail_vlm_selection)
     monkeypatch.setattr(llm_sam2, "run_sam2_api", fake_sam2_api)
+    monkeypatch.setattr(
+        llm_sam2,
+        "vlm_classify_food",
+        lambda *_args: {
+            "category": "non_food",
+            "confidence": 1.0,
+            "reason": "test",
+        },
+    )
 
     node = llm_sam2.LlmSam2Node(img_path=tmp_path / "rgb.png")
     node.output_dir = tmp_path / "vlm_sam2"
@@ -81,18 +90,12 @@ def test_llm_sam2_alias_uses_blue_ball_prompt_and_writes_audit_metadata(
     selected = json.loads(
         (node.output_dir / "selected_object.json").read_text(encoding="utf-8")
     )
-    assert selected == {
-        "user_instruction": instruction,
-        "candidates": ["racquetball"],
-        "selected_object_name": "racquetball",
-        "matched_instruction_alias": "blue racquetball",
-        "grounding_prompt": "blue ball",
-        "sam2_text_prompt": "blue ball.",
-        "accepted_sam2_class_names": ["blue ball"],
-        "visual_target_description": (
-            "small smooth blue ball; not a yellow/green tennis ball"
-        ),
-    }
+    assert selected["user_instruction"] == instruction
+    assert selected["selected_object_name"] == "racquetball"
+    assert selected["matched_instruction_alias"] == "blue racquetball"
+    assert selected["grounding_prompt"] == "blue ball"
+    assert selected["accepted_sam2_class_names"] == ["blue ball"]
+    assert selected["target_category"] == "non_food"
 
 
 def test_vlm_candidate_override_takes_precedence_over_fixed_alias(
@@ -107,6 +110,15 @@ def test_vlm_candidate_override_takes_precedence_over_fixed_alias(
 
     monkeypatch.setenv("VLM_CANDIDATE_OVERRIDE", "apple")
     monkeypatch.setattr(llm_sam2, "run_sam2_api", fake_sam2_api)
+    monkeypatch.setattr(
+        llm_sam2,
+        "vlm_classify_food",
+        lambda *_args: {
+            "category": "food",
+            "confidence": 1.0,
+            "reason": "test",
+        },
+    )
 
     node = llm_sam2.LlmSam2Node(img_path=tmp_path / "rgb.png")
     node.output_dir = tmp_path / "vlm_sam2"

@@ -527,10 +527,14 @@ def select_grasp_candidates(
                 candidate = rotation @ grasp
                 key = tuple(np.round(candidate, 8).ravel())
                 if key not in seen:
-                    seen.add(key); expanded.append(candidate)
-        oriented = [g for g in expanded if tool_z_down_angle_deg(T_world_obj @ g) <= ROUND_TOP_MAX_APPROACH_ANGLE_DEG]
-        centered = [g for g in oriented if np.linalg.norm(_object_point_in_tcp(g, center)[:2]) <= ROUND_TOP_MAX_CENTER_OFFSET_M]
-        height_ok = [g for g in centered if ROUND_TOP_MIN_NORMALIZED_HEIGHT <= (g[2, 3]-center[2])/size[2] <= ROUND_TOP_MAX_NORMALIZED_HEIGHT]
+                    seen.add(key)
+                    expanded.append(candidate)
+        oriented = [g for g in expanded if tool_z_down_angle_deg(
+            T_world_obj @ g) <= ROUND_TOP_MAX_APPROACH_ANGLE_DEG]
+        centered = [g for g in oriented if np.linalg.norm(
+            _object_point_in_tcp(g, center)[:2]) <= ROUND_TOP_MAX_CENTER_OFFSET_M]
+        height_ok = [g for g in centered if ROUND_TOP_MIN_NORMALIZED_HEIGHT <=
+                     (g[2, 3]-center[2])/size[2] <= ROUND_TOP_MAX_NORMALIZED_HEIGHT]
         pear_direction_ok = None
         pear_seed_width_ok = None
         pear_final_metrics_by_id = {}
@@ -619,13 +623,16 @@ def select_grasp_candidates(
                 if width <= ROUND_TOP_MAX_GRIPPER_OPENING_M
                 else []
             )
-        bottom_obj = center.copy(); bottom_obj[2] -= size[2] / 2.0
-        inferred_table_z = float((T_world_obj @ np.r_[bottom_obj, 1.0])[2]) if table_z is None else float(table_z)
+        bottom_obj = center.copy()
+        bottom_obj[2] -= size[2] / 2.0
+        inferred_table_z = float(
+            (T_world_obj @ np.r_[bottom_obj, 1.0])[2]) if table_z is None else float(table_z)
         clearance_ok = []
         grasp_z_offset = get_grasp_z_offset(selected_object_name)
         for g in width_ok:
             T_world_grasp = T_world_obj @ g
-            finger_world = T_world_grasp @ np.array([0.0, 0.0, ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M, 1.0])
+            finger_world = T_world_grasp @ np.array([0.0,
+                                                    0.0, ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M, 1.0])
             final_finger_z = float(finger_world[2] + grasp_z_offset)
             if final_finger_z >= inferred_table_z + ROUND_TOP_TABLE_CLEARANCE_M:
                 clearance_ok.append(g)
@@ -636,14 +643,32 @@ def select_grasp_candidates(
                     "center, height, short-axis, opening-margin, and "
                     "table-clearance filters."
                 )
-            raise RuntimeError("No round-top candidates satisfy orientation, center, height, width, and table-clearance filters.")
-        ranked = sorted(clearance_ok, key=lambda g: score_grasp(T_world_obj, g, selected_object_name))
-        limit = ROUND_TOP_CANDIDATE_COUNT if max_side_candidates is None else max(1, int(max_side_candidates))
+            raise RuntimeError(
+                "No round-top candidates satisfy orientation, center, height, "
+                "width, and table-clearance filters."
+            )
+        ranked = sorted(clearance_ok, key=lambda g: score_grasp(
+            T_world_obj, g, selected_object_name))
+        limit = ROUND_TOP_CANDIDATE_COUNT if max_side_candidates is None else max(
+            1, int(max_side_candidates))
         selected = ranked[:limit]
         selected_clearances = [
-            float(((T_world_obj @ g) @ np.array([0.0, 0.0, ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M, 1.0]))[2]
-                  + grasp_z_offset - inferred_table_z)
-            for g in selected
+            float(
+                (
+                    (T_world_obj @ grasp)
+                    @ np.array(
+                        [
+                            0.0,
+                            0.0,
+                            ROUND_TOP_TCP_TO_LOWEST_FINGER_Z_M,
+                            1.0,
+                        ]
+                    )
+                )[2]
+                + grasp_z_offset
+                - inferred_table_z
+            )
+            for grasp in selected
         ]
         if selected_object_name == "pear":
             selected_metrics = [
@@ -674,7 +699,25 @@ def select_grasp_candidates(
                 f"leveled={len(width_ok)}, "
                 f"selected=[{selected_metrics_text}]"
             )
-        print(f"Round-top selection: object={selected_object_name}, raw={raw_grasp_count}, symmetry_expanded={len(expanded)}, orientation={len(oriented)}, center={len(centered)}, height={len(height_ok)}, width={len(width_ok)}, table={len(clearance_ok)}, selected={len(selected)}, estimated_width_m={width:.5f}, opening_margin_m={ROUND_TOP_MAX_GRIPPER_OPENING_M-width:.5f}, applied_world_z_offset_m={grasp_z_offset:.5f}, finger_clearance_m=[{min(selected_clearances):.5f},{max(selected_clearances):.5f}]")
+        print(
+            "Round-top selection: "
+            f"object={selected_object_name}, "
+            f"raw={raw_grasp_count}, "
+            f"symmetry_expanded={len(expanded)}, "
+            f"orientation={len(oriented)}, "
+            f"center={len(centered)}, "
+            f"height={len(height_ok)}, "
+            f"width={len(width_ok)}, "
+            f"table={len(clearance_ok)}, "
+            f"selected={len(selected)}, "
+            f"estimated_width_m={width:.5f}, "
+            "opening_margin_m="
+            f"{ROUND_TOP_MAX_GRIPPER_OPENING_M - width:.5f}, "
+            f"applied_world_z_offset_m={grasp_z_offset:.5f}, "
+            "finger_clearance_m="
+            f"[{min(selected_clearances):.5f},"
+            f"{max(selected_clearances):.5f}]"
+        )
         return selected
 
     if profile == "top_down" and selected_object_name == "hammer":

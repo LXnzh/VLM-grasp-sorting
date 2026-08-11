@@ -6,9 +6,6 @@ setup(
     name=package_name,
     version='0.0.0',
     packages=find_packages(exclude=['test']),
-    package_data={
-        'my_course_pkg.grasp': ['data/tuna_gripper_geometry.json'],
-    },
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -40,6 +37,11 @@ setup(
             'grasp_plan_only = my_course_pkg.grasp.plan_only:run',
             'grasp_eval = my_course_pkg.grasp_eval:main',
             'experiment_session = my_course_pkg.experiment_session:main',
+            'sim_target_nudge = '
+            'my_course_pkg.tasks.tracking.sim_target_nudge:main',
+            'foundationpose_tracking_grasp = '
+            'my_course_pkg.tasks.tracking.node:main',
+            'pbvs_sorting_grasp = my_course_pkg.tasks.pbvs.node:main',
         ],
     },
 )

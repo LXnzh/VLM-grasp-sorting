@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """High-level pipeline: init pose -> RGB-D -> LLM/SAM2 -> FoundationPose."""
 
-import argparse
 import time
 
 import rclpy

@@ -668,7 +668,7 @@ def test_vertical_target_bounds_loader_fails_closed_on_timeout(monkeypatch):
         )
 
 
-@pytest.mark.parametrize("object_name", ["foam_brick", "pudding_box"])
+@pytest.mark.parametrize("object_name", ["foam_brick", "gelatin_box"])
 @pytest.mark.parametrize(
     "original_z, expected_z",
     [

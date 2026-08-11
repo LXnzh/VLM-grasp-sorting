@@ -6,8 +6,6 @@ from pathlib import Path
 
 YCB_DIRECTORY_BY_OBJECT = {
     "tomato_soup_can": "005_tomato_soup_can",
-    "tuna_fish_can": "007_tuna_fish_can",
-    "pudding_box": "008_pudding_box",
     "gelatin_box": "009_gelatin_box",
     "banana": "011_banana",
     "apple": "013_apple",
