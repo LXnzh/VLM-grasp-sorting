@@ -1,0 +1,21 @@
+composite_file: textured_vhacd_composite.obj
+material_file: textured.mtl
+material_map: texture_map.png
+obj_disp_name: sponge
+obj_name: textured
+original_file: textured.obj
+submesh_files:
+- textured_vhacd_collision_0.obj
+- textured_vhacd_collision_1.obj
+- textured_vhacd_collision_2.obj
+- textured_vhacd_collision_3.obj
+- textured_vhacd_collision_4.obj
+- textured_vhacd_collision_5.obj
+submesh_props:
+- 0.516177184008301
+- 0.29466865590004454
+- 0.16783013998394203
+- 0.004404134560955315
+- 0.008444553275789312
+- 0.008475332270967677
+weight: 0.0062

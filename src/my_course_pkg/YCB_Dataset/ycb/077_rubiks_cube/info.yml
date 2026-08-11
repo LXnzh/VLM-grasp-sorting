@@ -1,0 +1,11 @@
+composite_file: textured_vhacd_composite.obj
+material_file: textured.mtl
+material_map: texture_map.png
+obj_disp_name: rubiks_cube
+obj_name: textured
+original_file: textured.obj
+submesh_files:
+- textured_vhacd_collision_0.obj
+submesh_props:
+- 1.0
+weight: 0.094

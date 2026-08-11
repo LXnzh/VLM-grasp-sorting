@@ -1,0 +1,13 @@
+composite_file: textured_vhacd_composite.obj
+material_file: textured.mtl
+material_map: texture_map.png
+obj_disp_name: pear
+obj_name: textured
+original_file: textured.obj
+submesh_files:
+- textured_vhacd_collision_0.obj
+- textured_vhacd_collision_1.obj
+submesh_props:
+- 0.8493497840982362
+- 0.15065021590176358
+weight: 0.049
