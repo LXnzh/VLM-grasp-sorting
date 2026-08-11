@@ -1,0 +1,14 @@
+# /root/.config/tmuxinator/kinova_gui2.yml
+
+name: kinova_gui2
+root: ~/
+
+windows:
+  - editor:
+      layout: tiled
+      panes:
+        - kinova_sim
+        - ros2 launch kinova_gen3_7dof_robotiq_2f_85_moveit_config sim.launch.py
+        - sleep 10; ros2 launch arm_api2 moveit2_iface.launch.py
+        - sleep 15; ros2 launch ros2_dash_gui bridge.launch.py
+        - echo "YOU CAN START GUI NOW!"

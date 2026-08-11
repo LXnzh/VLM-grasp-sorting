@@ -1,0 +1,14 @@
+# /root/.config/tmuxinator/ur_api2.yml
+
+name: ur_api2
+root: ~/
+
+# TODO: Add UR type as param to the tmuxinator also 
+windows:
+  - editor:
+      layout: tiled
+      panes:
+        - ros2 launch ur_simulation_gz ur_sim_control.launch.py ur_type:="ur10" use_sim_time:=true
+        - sleep 5; ros2 launch ur_moveit_config uir_moveit.launch.py ur_type:="ur10"
+        - sleep 10; ros2 launch arm_api2 moveit2_iface.launch.py robot_name:="ur"
+        - echo "YOU CAN START GUI NOW!"

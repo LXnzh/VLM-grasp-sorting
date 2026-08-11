@@ -1,0 +1,8 @@
+models/models_ifl
+models/universal_robots_ur10e
+models/robotiq_2f85
+outputs/
+conf/
+.venv
+__pycache__/
+*.pyc

@@ -1,0 +1,27 @@
+composite_file: textured_vhacd_composite.obj
+material_file: textured.mtl
+material_map: texture_map.png
+obj_disp_name: hammer
+obj_name: textured
+original_file: textured.obj
+submesh_files:
+- textured_vhacd_collision_0.obj
+- textured_vhacd_collision_1.obj
+- textured_vhacd_collision_2.obj
+- textured_vhacd_collision_3.obj
+- textured_vhacd_collision_4.obj
+- textured_vhacd_collision_5.obj
+- textured_vhacd_collision_6.obj
+- textured_vhacd_collision_7.obj
+- textured_vhacd_collision_8.obj
+submesh_props:
+- 0.16076807776413862
+- 0.4498232040778595
+- 0.05205631074614232
+- 0.01678159300073156
+- 0.016238893072043462
+- 0.07045277521221374
+- 0.06968839583910853
+- 0.0995359068996606
+- 0.0646548433881019
+weight: 0.688

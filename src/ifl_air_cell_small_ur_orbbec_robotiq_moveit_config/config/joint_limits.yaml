@@ -1,0 +1,100 @@
+# joint_limits.yaml allows the dynamics properties specified in the URDF to be overwritten or augmented as needed
+
+# For beginners, we downscale velocity and acceleration limits.
+# You can always specify higher scaling factors (<= 1.0) in your motion requests.  # Increase the values below to 1.0 to always move at maximum speed.
+default_velocity_scaling_factor: 0.1
+default_acceleration_scaling_factor: 0.1
+
+# Specific joint properties can be changed with the keys [max_position, min_position, max_velocity, max_acceleration]
+# Joint limits can be turned off with [has_velocity_limits, has_acceleration_limits]
+joint_limits:
+  robotiq_85_left_finger_tip_joint:
+    has_velocity_limits: false
+    max_velocity: 0
+    has_acceleration_limits: false
+    max_acceleration: 0
+  robotiq_85_left_inner_knuckle_joint:
+    has_velocity_limits: false
+    max_velocity: 0
+    has_acceleration_limits: false
+    max_acceleration: 0
+  robotiq_85_left_knuckle_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: false
+    max_acceleration: 0
+  robotiq_85_right_finger_tip_joint:
+    has_velocity_limits: false
+    max_velocity: 0
+    has_acceleration_limits: false
+    max_acceleration: 0
+  robotiq_85_right_inner_knuckle_joint:
+    has_velocity_limits: false
+    max_velocity: 0
+    has_acceleration_limits: false
+    max_acceleration: 0
+  robotiq_85_right_knuckle_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: false
+    max_acceleration: 0
+  shoulder_pan_joint:
+    # acceleration limits are not publicly available
+    has_acceleration_limits: false
+    has_effort_limits: true
+    has_position_limits: true
+    has_velocity_limits: true
+    max_effort: 330.0
+    max_position: 1.74533  # 100 degrees in radians
+    max_velocity: 2.0944   # 120 degrees in radians
+    min_position: -1.74533 # -100 degrees in radians
+  shoulder_lift_joint:
+    # acceleration limits are not publicly available
+    has_acceleration_limits: false
+    has_effort_limits: true
+    has_position_limits: true
+    has_velocity_limits: true
+    max_effort: 330.0
+    max_position: 6.28319  # 360 degrees in radians
+    max_velocity: 2.0944   # 120 degrees in radians
+    min_position: -6.28319 # -360 degrees in radians
+  elbow_joint:
+    # acceleration limits are not publicly available
+    has_acceleration_limits: false
+    has_effort_limits: true
+    has_position_limits: true
+    has_velocity_limits: true
+    max_effort: 150.0
+    max_position: 3.14159  # 180 degrees in radians
+    max_velocity: 3.14159  # 180 degrees in radians
+    min_position: -3.14159 # -180 degrees in radians
+  wrist_1_joint:
+    # acceleration limits are not publicly available
+    has_acceleration_limits: false
+    has_effort_limits: true
+    has_position_limits: true
+    has_velocity_limits: true
+    max_effort: 54.0
+    max_position: 6.28319  # 360 degrees in radians
+    max_velocity: 3.14159  # 180 degrees in radians
+    min_position: -6.28319 # -360 degrees in radians
+  wrist_2_joint:
+    # acceleration limits are not publicly available
+    has_acceleration_limits: false
+    has_effort_limits: true
+    has_position_limits: true
+    has_velocity_limits: true
+    max_effort: 54.0
+    max_position: 6.28319  # 360 degrees in radians
+    max_velocity: 3.14159  # 180 degrees in radians
+    min_position: -6.28319 # -360 degrees in radians
+  wrist_3_joint:
+    # acceleration limits are not publicly available
+    has_acceleration_limits: false
+    has_effort_limits: true
+    has_position_limits: true
+    has_velocity_limits: true
+    max_effort: 54.0
+    max_position: 6.28319  # 360 degrees in radians
+    max_velocity: 3.14159  # 180 degrees in radians
+    min_position: -6.28319 # -360 degrees in radians

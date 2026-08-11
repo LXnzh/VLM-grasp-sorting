@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="arbeitsmatte" params="prefix parent">
+
+    <joint name="${prefix}arbeitsmatte_joint" type="fixed">
+      <!-- The parent link must be read from the robot model it is attached to. -->
+      <parent link="${parent}"/>
+      <child link="${prefix}arbeitsmatte_link"/>
+      <origin xyz="-0.42 -1.035 0.615" rpy="0 0 0" />
+    </joint>
+
+    <!-- Unterplatte-Link -->
+    <link name="${prefix}arbeitsmatte_link">
+      <visual>
+        <geometry>
+          <box size="0.58 0.77 0.02"/> <!-- 580x770x20 mm -->
+        </geometry>
+        <material name="blue">
+            <color rgba="0.0 0.35 0.9 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <geometry>
+          <box size="0.58 0.77 0.02"/>
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </collision>
+    </link>
+
+  </xacro:macro>
+
+</robot>

@@ -1,0 +1,234 @@
+sim:
+  headless: false # Set to false for GUI mode
+  scene_dir: "models/ur10e_2f85/scene.xml"
+  #scene_dir: "models/ur10e_2f85/combined_ur10e_2f85_scene.xml"
+  # available cameras: camera_orbbec_static, camera_realsense, camera_third_person, camera_orbbec, 
+  # Perception consumes only camera_orbbec RGB + depth. Keep the unused
+  # third-person camera out of camera_names so its RGB is not rendered.
+  camera_names: ["camera_orbbec"] # max 2 cameras supported
+  control_timestep: 0.02
+  # ROS publish settings (tune to avoid rosbridge overload)
+  # ros_publish_hz: maximum joint_states publish rate (Hz). If omitted, defaults to min(sim_rate,50).
+  ros_publish_hz: 20
+  # ros_position_tol: minimum change in joint position (rad) to trigger a publish
+  ros_position_tol: 1e-4
+  render_fps: 0.2
+  camera_size: [1280, 720]
+  enable_pointcloud_camera1: false
+  enable_pointcloud_camera2: false
+  enable_depth_camera1: true
+  enable_depth_camera2: false
+  tf_parent_frame: base_link
+  pointcloud_profile: false        # set true to log per-stage timings
+  pointcloud_profile_log_every: 10
+  pointcloud_fps: 1                   # throttle pointcloud generation independently from render_fps
+  pointcloud_stride: 2                # use every 2nd pixel in x/y for pointclouds (4x fewer points)
+  pointcloud_transform:
+    cameras:
+      camera_orbbec_static:
+        frame: local                  # apply rotation/translation in camera frame
+        translation: [0.0, 0.0, 0.0]  # additional shift for this camera
+        rpy_deg: [180, 0.0, 0.0]      # additional rotation for this camera
+      camera_realsense:
+        frame: local
+        translation: [0.0, 0.0, 0.0]
+        rpy_deg: [180, 0.0, 0.0]
+  
+
+# Direct simulator entrypoints keep the current stable scene unless overridden.
+scene_mode: "mix"
+
+# scene_mode=assign: required objects in slot order. The launch prompt fills
+# this list; any remaining slots are sampled from the rest of the object pool.
+assigned_object_names: []
+
+# Ordered grasp-category pools for scene_mode=random. Category order maps to
+# placement slots 1-5; banana and hammer are intentionally singleton pools.
+scene_object_categories:
+  cylindrical_can:
+    - "tomato_soup_can"
+  banana:
+    - "banana"
+  round_top:
+    - "apple"
+    - "lemon"
+    - "peach"
+    - "pear"
+    - "orange"
+    - "plum"
+    - "baseball"
+    - "tennis_ball"
+    - "racquetball"
+  box:
+    - "gelatin_box"
+    - "sponge"
+    - "foam_brick"
+    - "rubiks_cube"
+  tool_top:
+    - "hammer"
+
+# scene_mode=mix: always include these target objects first, then randomly fill.
+fixed_object_names:
+  - "tomato_soup_can"
+  - "banana"
+  - "apple"
+  - "foam_brick"
+  - "hammer"
+
+# Fill up to this many objects. If fixed_object_names has more entries, keep all fixed objects.
+random_object_count: 6
+
+# Fixed grasp-friendly initial table slots. Object identities may vary, but
+# selected objects are placed in these slots in selection order.
+placement_slots:
+  - [-0.74, -0.08, 0.0]
+  - [-0.55, -0.08, 0.0]
+  - [-0.36, -0.08, 0.0]
+  - [-0.74, 0.20, 0.0]
+  - [-0.55, 0.30, 0.0]
+  - [-0.85, 0.35, 0.0]
+
+# Sorting uses a lower two-row object field and reserves the upper table area
+# for one food bin. The outer bin footprint (including walls) stays disjoint
+# from every supported object's conservative 0.14 m footprint.
+sorting_placement_slots:
+  - [-0.85, -0.14, 0.0]
+  - [-0.65, -0.14, 0.0]
+  - [-0.45, -0.14, 0.0]
+  - [-0.85, 0.08, 0.0]
+  - [-0.65, 0.08, 0.0]
+  - [-0.45, 0.08, 0.0]
+
+# Ordinary simulator launches have no classification bin.
+classification_bins:
+  enabled: false
+  bins: []
+
+# Enabled only when MY_COURSE_SINGLE_BIN_MODE=1 (the GUI product flow).
+classification_bins_single_random:
+  enabled: true
+  random_color: true
+  position_range:
+    x: [-0.65, -0.55]
+    y: [0.40, 0.45]
+  layout_constraints:
+    table_bounds: [-1.32, 0.20, -0.30, 0.60]
+    overview_xy_bounds: [-1.02, -0.18, -0.29, 0.58]
+    base_exclusion: [-0.18, 0.18, -0.22, 0.22]
+    object_footprint_radius_m: 0.14
+    object_height_m: 0.12
+    bin_safety_margin_m: 0.04
+    reach_radius_m: [0.25, 1.10]
+    table_surface_z_m: -0.025
+  bins:
+    - category: "food"
+      name: "food_bin"
+      center_xy: [-0.60, 0.425]
+      inner_size: [0.24, 0.20]
+      wall_height: 0.10
+      wall_thickness: 0.01
+      floor_thickness: 0.01
+      color: [0.0, 1.0, 1.0, 1.0]
+
+# Dynamic RGB-D tracking needs a real stream; the pure grasp scene can keep
+# its low render rate when sorting mode is disabled.
+sorting_render_fps: 10.0
+# YCB scene-generation pool (16 release-qualified objects)
+objects:
+  - name: "tomato_soup_can"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/005_tomato_soup_can"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "gelatin_box"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/009_gelatin_box"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "banana"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/011_banana"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "apple"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/013_apple"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "lemon"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/014_lemon"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "peach"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/015_peach"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "pear"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/016_pear"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "orange"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/017_orange"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "plum"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/018_plum"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "sponge"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/026_sponge"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "hammer"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/048_hammer"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "baseball"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/055_baseball"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "tennis_ball"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/056_tennis_ball"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "racquetball"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/057_racquetball"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "foam_brick"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/061_foam_brick"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+  - name: "rubiks_cube"
+    type: "mesh"
+    ycb_dir: "/home/ws/src/my_course_pkg/YCB_Dataset/ycb/077_rubiks_cube"
+    size: []
+    position_range: {x: [-0.85, -0.25], y: [-0.15, 0.35], z: [0.0, 0.02]}
+    orientation: [0, 0, 0]
+      

@@ -1,0 +1,65 @@
+{
+    "name": "ROS 2 Development Container (Ubuntu Host)",
+    "privileged": true,
+    "remoteUser": "ros2",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "USERNAME": "ros2",
+            "USER_UID": "1000",
+            "USER_GID": "1000",
+            "RENDER_GROUP_ID": "110", // replace with actual render group ID, run 'getent group render | cut -d: -f3' on host
+            "VIDEO_GROUP_ID": "44",   // replace with actual video group ID, run 'getent group video | cut -d: -f3' on host
+            "INPUT_GROUP_ID": "107"    // replace with actual input group ID, run 'getent group input | cut -d: -f3' on host
+
+        }
+    },
+    "workspaceFolder": "/home/ws",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws,type=bind",
+    "customizations": {
+        "vscode": {
+            "extensions":[
+                "ms-python.python",
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-themes",
+                "ms-vscode.cpptools-extension-pack",
+                "twxs.cmake",
+                "donjayamanne.python-extension-pack",
+                "ms-iot.vscode-ros",
+                "ms-azuretools.vscode-docker",
+                "yzhang.markdown-all-in-one"
+            ]
+        }
+    },
+    "containerEnv": {
+        "ROS_LOCALHOST_ONLY": "1",
+        "ROS_DOMAIN_ID": "${localEnv:ROS_DOMAIN_ID}",
+        "LD_LIBRARY_PATH": "/usr/lib/wsl/lib:/usr/local/lib",
+        "MUJOCO_GL": "egl",
+        "PYOPENGL_PLATFORM": "egl",
+        "MESA_LOADER_DRIVER_OVERRIDE": "d3d12",
+        "NVIDIA_VISIBLE_DEVICES": "all",
+        "NVIDIA_DRIVER_CAPABILITIES": "all"
+    },
+    "runArgs": [
+        "--net=host",
+        "--pid=host",
+        "--ipc=host",
+        "--gpus=all",
+        "--device=/dev/dxg",
+        "-e", "DISPLAY=${localEnv:DISPLAY}",
+        "--cap-add=SYS_PTRACE",
+        "--security-opt", "seccomp=unconfined"
+    ],
+    "mounts": [
+       "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
+       "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
+       "source=/usr/lib/wsl/lib,target=/usr/lib/wsl/lib,type=bind,readonly",
+       "source=/var/run/dbus,target=/var/run/dbus,type=bind",
+       "source=/home/${localEnv:USER}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind",
+       "source=/home/${localEnv:USER}/.Xauthority,target=/home/${localEnv:USER}/.Xauthority,type=bind,consistency=cached",
+       "source=/usr/src,target=/usr/src,type=bind,consistency=cached",
+       "source=/lib/modules,target=/lib/modules,type=bind,consistency=cached"
+    ],
+    "postCreateCommand": "sudo apt update && sudo rosdep update && sudo rosdep install -r --from-paths src --ignore-src -y && python3 -m pip install --user -r /home/ws/requirements.txt && sudo chown -R $(whoami) /home/ws/ && chmod +x /home/ws/*.bash"
+}

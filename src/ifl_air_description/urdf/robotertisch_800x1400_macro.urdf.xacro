@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="robotertisch_800x1400" params="prefix parent *origin rotation:=^|${pi}">
+
+    <joint name="${prefix}robotertisch_800x1400_base_joint" type="fixed">
+      <!-- The parent link must be read from the robot model it is attached to. -->
+      <parent link="${parent}"/>
+      <child link="${prefix}robotertisch_800x1400_link"/>
+      <xacro:insert_block name="origin"/>
+      <!-- <origin xyz="0.3 -0.75 0.375" rpy="0 0 ${rotation}"/> -->
+    </joint>
+
+    <link name="${prefix}robotertisch_800x1400_link">
+        <visual>
+          <origin xyz="0 0 0.0085" rpy="0 0 0" />
+          <geometry>
+            <box size="0.6 1.4 0.75"/>
+          </geometry>
+          <material name="gray">
+            <color rgba="0.5 0.5 0.5 0.9"/>
+          </material>
+        </visual>
+        <collision>
+          <origin xyz="0 0 0.0085" rpy="0 0 0"/>
+          <geometry>
+            <box size="0.6 1.4 0.75"/>
+          </geometry>
+        </collision>
+    </link>
+
+  </xacro:macro>
+</robot>

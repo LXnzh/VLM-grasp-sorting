@@ -1,0 +1,32 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "build",
+        "type": "shell",
+        "command": "colcon build --cmake-args '-DCMAKE_BUILD_TYPE=Debug' --symlink-install"
+      },
+      {
+        "label": "build pkg",
+        "type": "shell",
+        "command": "colcon build --cmake-args '-DCMAKE_BUILD_TYPE=Debug' --symlink-install --packages-select ${input:package}"
+      },
+      {
+        "label": "test",
+        "type": "shell",
+        "command": "colcon test && colcon test-result"
+      },
+      {
+        "label": "rosdep install",
+        "type": "shell",
+        "command": "sudo rosdep update && sudo rosdep install -r --from-paths src --ignore-src -y"
+      }
+    ],
+    "inputs": [
+        {
+        "id": "package",
+        "type": "promptString",
+        "description": "Package name"
+        }
+    ]
+  }

@@ -94,7 +94,7 @@ class ProjectLauncher(tk.Tk):
         ttk.Label(
             header,
             text=(
-                "Food-first robotic sorting · PBVS dynamic grasp is the default workflow"
+                "VLM selection · PBVS tracking · stable grasp · food sorting"
             ),
             style="Subtitle.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(3, 0))
@@ -200,7 +200,7 @@ class ProjectLauncher(tk.Tk):
         ).grid(row=3, column=0, sticky="w", pady=(9, 0))
         ttk.Button(
             instruction_card,
-            text="Start Default PBVS Dynamic Food Grasp",
+            text="Start Complete Grasp-and-Sort Flow",
             style="Primary.TButton",
             command=self.run_dynamic_grasp,
         ).grid(row=4, column=0, sticky="ew", pady=(10, 0))
@@ -211,59 +211,35 @@ class ProjectLauncher(tk.Tk):
             wraplength=450,
         ).grid(row=5, column=0, sticky="w", pady=(7, 0))
 
-        task_card = ttk.LabelFrame(
-            content, text="3. Run a Task", style="Card.TLabelframe"
+        flow_card = ttk.LabelFrame(
+            content, text="3. Complete Flow", style="Card.TLabelframe"
         )
-        task_card.grid(row=2, column=1, sticky="nsew", padx=(6, 0), pady=(0, 12))
-        task_card.columnconfigure(0, weight=1)
-
-        ttk.Button(
-            task_card,
-            text="Default: PBVS Dynamic Food Grasp",
-            style="Primary.TButton",
-            command=self.run_dynamic_grasp,
-        ).grid(row=0, column=0, sticky="ew")
+        flow_card.grid(row=2, column=1, sticky="nsew", padx=(6, 0), pady=(0, 12))
+        flow_card.columnconfigure(0, weight=1)
         ttk.Label(
-            task_card,
+            flow_card,
             text=(
-                "The default workflow. PBVS follows one selected instance while it "
-                "moves, then safely grasps after it stops."
+                "1. Capture the home overview RGB-D frame.\n"
+                "2. Use the VLM to select and classify one supported object.\n"
+                "3. Freeze the food-bin or non-food drop target.\n"
+                "4. Lock with SAM2 and follow the moving object with PBVS.\n"
+                "5. After a continuous stable window, estimate the 6D pose.\n"
+                "6. Execute the pure stable grasp through lift, then place and return home."
             ),
             style="Subtitle.TLabel",
             wraplength=455,
-        ).grid(row=1, column=0, sticky="w", pady=(5, 12))
-
-        ttk.Button(
-            task_card,
-            text="Food Classification and Placement",
-            style="Primary.TButton",
-            command=self.run_food_placement,
-        ).grid(row=2, column=0, sticky="ew")
+            justify=tk.LEFT,
+        ).grid(row=0, column=0, sticky="w")
         ttk.Label(
-            task_card,
+            flow_card,
             text=(
-                "Food is placed in a camera-located random food_bin. Non-food "
-                "objects use the default drop point."
+                "Food goes to the visually located random food_bin. Non-food goes "
+                "to the configured world target. Any unknown identity, category, "
+                "mask, pose, stability gate, or placement target fails closed."
             ),
             style="Subtitle.TLabel",
             wraplength=455,
-        ).grid(row=3, column=0, sticky="w", pady=(5, 12))
-
-        ttk.Button(
-            task_card,
-            text="Static Instance Grasp",
-            style="Primary.TButton",
-            command=self.run_instance_grasp,
-        ).grid(row=4, column=0, sticky="ew")
-        ttk.Label(
-            task_card,
-            text=(
-                "Runs one RGB-D perception and FoundationPose pass for a stationary "
-                "object selected from the same natural-language instruction."
-            ),
-            style="Subtitle.TLabel",
-            wraplength=455,
-        ).grid(row=5, column=0, sticky="w", pady=(7, 0))
+        ).grid(row=1, column=0, sticky="w", pady=(14, 0))
 
         monitor = ttk.LabelFrame(
             content, text="4. Live Task Monitor — Complete ROS Log", style="Card.TLabelframe"
@@ -346,34 +322,6 @@ class ProjectLauncher(tk.Tk):
         return "break"
 
     def _instruction_args(self) -> str | None:
-        if self.voice_mode.get():
-            try:
-                seconds = int(self.voice_seconds.get())
-            except ValueError:
-                messagebox.showerror(
-                    APP_TITLE, "Recording duration must be a positive integer."
-                )
-                return None
-            if seconds <= 0:
-                messagebox.showerror(
-                    APP_TITLE, "Recording duration must be greater than zero."
-                )
-                return None
-            language_codes = {
-                "Auto": "",
-                "Chinese": "zh",
-                "English": "en",
-                "German": "de",
-            }
-            language = language_codes[self.voice_language.get()]
-            # The GUI always uses the browser recorder so voice input has a
-            # visible, permission-aware recording page instead of silently
-            # choosing an ALSA device inside a container.
-            args = f"--voice --voice-input browser --voice-seconds {seconds}"
-            if language:
-                args += f" --voice-language {language}"
-            return args
-
         instruction = self.instruction_text.get("1.0", tk.END).strip()
         if not instruction:
             messagebox.showerror(
@@ -624,6 +572,8 @@ class ProjectLauncher(tk.Tk):
     def _process_environment(self, *, food_mode: bool = False) -> dict[str, str]:
         """Return child-process environment without exposing keys in argv."""
         environment = os.environ.copy()
+        if not environment.get("ROS_DOMAIN_ID", "").strip():
+            environment.pop("ROS_DOMAIN_ID", None)
         if food_mode:
             environment["MY_COURSE_SINGLE_BIN_MODE"] = "1"
         key = self.api_key.get().strip()
@@ -737,7 +687,9 @@ class ProjectLauncher(tk.Tk):
         self.scene_mode = True
         self.launch_terminal(
             "Food-Sorting Simulation",
-            "ros2 launch ifl_air_ur_launch cell_small_full_mujoco_moveit.launch.py",
+            "ros2 launch ifl_air_ur_launch "
+            "cell_small_full_mujoco_moveit.launch.py "
+            "scene_mode:=random",
             food_mode=True,
         )
 
@@ -761,43 +713,6 @@ class ProjectLauncher(tk.Tk):
     def list_topics(self) -> None:
         self.launch_terminal("ROS 2 Topics", "ros2 topic list")
 
-    def run_instance_grasp(self) -> None:
-        if self.voice_mode.get():
-            self.capture_voice_instruction(after_capture=self.run_instance_grasp)
-            return
-        args = self._instruction_args()
-        if (
-            args is None
-            or not self._require_api_key()
-            or not self._ensure_food_scene()
-        ):
-            return
-        self.launch_terminal(
-            "Instance Grasp",
-            f"ros2 run my_course_pkg pipeline {args} && ros2 run my_course_pkg grasp_demo",
-        )
-
-    def run_food_placement(self) -> None:
-        if self.voice_mode.get():
-            self.capture_voice_instruction(after_capture=self.run_food_placement)
-            return
-        args = self._instruction_args()
-        if (
-            args is None
-            or not self._require_api_key()
-            or not self._ensure_food_scene()
-        ):
-            return
-        self._write_log(
-            "Food placement requires the current simulation to use the "
-            "Food-bin Full Scene."
-        )
-        self.launch_terminal(
-            "Food Classification and Placement",
-            f"ros2 run my_course_pkg pipeline {args} && ros2 run my_course_pkg grasp_demo",
-            food_mode=True,
-        )
-
     def run_dynamic_grasp(self) -> None:
         if self.voice_mode.get():
             self.capture_voice_instruction(after_capture=self.run_dynamic_grasp)
@@ -811,7 +726,7 @@ class ProjectLauncher(tk.Tk):
             return
         self.launch_terminal(
             "PBVS Dynamic Grasp",
-            f"ros2 run my_course_pkg pbvs_follow_stop_grasp {args}",
+            f"ros2 run my_course_pkg pbvs_sorting_grasp {args}",
             food_mode=True,
         )
 
@@ -824,7 +739,10 @@ class ProjectLauncher(tk.Tk):
 
     def _update_task_phase(self, message: str) -> None:
         """Translate the ROS/PBVS state machine into operator guidance."""
-        if "SAFE_STOP" in message or "PBVS_TRACKING_LOST" in message:
+        if "TASK_FAILED" in message:
+            reason = message.split("TASK_FAILED:", 1)[-1].strip()
+            self.task_phase.set(f"Task failed: {reason}")
+        elif "SAFE_STOP" in message or "PBVS_TRACKING_LOST" in message:
             self.task_phase.set(
                 "Safe stop / target lost: do not move the robot or target; inspect the log."
             )
@@ -844,6 +762,12 @@ class ProjectLauncher(tk.Tk):
             self.task_phase.set("PBVS following: you may move the target; the robot is tracking it.")
         elif "TARGET_LOCKED" in message:
             self.task_phase.set("Target locked: you may now move the selected target instance.")
+        elif "SORTING_TARGET_READY" in message:
+            self.task_phase.set("Sorting target ready: SAM2 is locking the selected object. Keep it still.")
+        elif "VLM_SELECTION_COMPLETE" in message:
+            self.task_phase.set("Object selected: VLM is classifying food/non-food. Keep it still.")
+        elif "VLM_SELECTION_REQUEST" in message:
+            self.task_phase.set("VLM is selecting the instructed object. Keep it still.")
         elif "INITIAL_POSE_READY" in message:
             self.task_phase.set(
                 "Initial pose ready: your instruction was submitted; VLM/SAM2 is selecting the target. Keep the target still until TARGET_LOCKED appears."

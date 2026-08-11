@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="robotertisch_880x1460" params="prefix parent child rotation:=^|${pi}">
+
+    <joint name="${prefix}robotertisch_880x1460_base_joint" type="fixed">
+      <!-- The parent link must be read from the robot model it is attached to. -->
+      <parent link="${parent}"/>
+      <child link="${prefix}robotertisch_880x1460_link"/>
+      <origin xyz="-0.44 -0.73 0.3075" rpy="0 0 ${pi/2}"  />
+    </joint>
+
+    <link name="${prefix}robotertisch_880x1460_link">
+        <visual>
+          <origin xyz="0 0 0" rpy="0 0 ${pi/2}" />
+           <geometry>
+            <box size="0.88 1.46 0.605"/>
+          </geometry>
+            <material name="aluminum_profile">
+            <color rgba="0.78 0.78 0.78 1.0"/>
+          </material>
+        </visual>
+        <collision>
+          <origin xyz="0 0 0.0" rpy="0 0 ${pi/2}"/>
+          <geometry>
+            <box size="0.88 1.46 0.605"/>
+          </geometry>
+        </collision>
+        <inertial>
+          <mass value="0.002" />
+          <origin xyz="0 0 0" />
+          <inertia ixx="8.432e-6" ixy="3.804169e-9" ixz="7.00981e-9" iyy="8.460e-6" iyz="-8.41529e-9" izz="1.606e-5" />
+        </inertial>
+    </link>
+
+    <joint name="${prefix}tisch_mount_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}tisch_mount_link"/>
+      <origin xyz="-0.44 -0.44 0.605" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}tisch_mount_link"/>
+
+  </xacro:macro>
+</robot>

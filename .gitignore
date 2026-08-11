@@ -1,25 +1,35 @@
-# Operating-system and editor artifacts
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-
-# Python caches and test output
+build
+install
+log
+.venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
-.coverage
-htmlcov/
+*.pkl
+*.db3
+*.mp4
+*.avi
+*.bag
+*.log
+metadata.yaml
+recorded_data/
+lerobot_datasets/
+projects/
 
-# ROS 2 / colcon generated artifacts
-build/
-install/
-log/
+# Local perception, experiment, and verification artifacts.
+outputs_local/
+trial_logs*/
+/logs/
+/codex_verify.status
+/src/my_course_pkg/my_course_pkg/grasp/frames_*.gv
+/src/my_course_pkg/my_course_pkg/grasp/frames_*.pdf
 
-# Local environments and credentials
-.venv/
-venv/
-.env
-.env.*
-!.env.example
+# Local graphics/runtime diagnostics; these are not workspace tests.
+/check_env.py
+/test_d3d12*.py
+/test_egl.py
+/test_gl_info*.py
+/test_perf.py
+/test_render_quick.py
+/test_zink_glfw.py

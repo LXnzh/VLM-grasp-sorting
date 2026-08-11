@@ -1,0 +1,65 @@
+{
+    "configurations": [
+        {
+            "name": "(gdb) C++ Debugger ROS2",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/install/${input:package}/lib/${input:package}/${input:program}",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            // Debug a running C++ node (launched from launch file), add following prefix to launch file: prefix=['gdbserver localhost:3000'], 
+            "name": "(gdb) C++ Debugger ROS2 (remote)",
+            "request": "launch",
+            "type": "cppdbg",
+            "miDebuggerServerAddress": "localhost:3000",
+            "cwd": "/",
+            "program": "${workspaceFolder}/install/${input:package}/lib/${input:package}/${input:program}"
+        },
+        {
+            "name": "Debug Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            // Debug all nodes in the current selected launch file (C++ and Python)
+            "name": "ROS: Debug Current Launch File",
+            "type": "ros",
+            "request": "launch",
+            "target": "${file}",
+            "launch": [
+                // exclude following nodes from debugging
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "package",
+            "type": "promptString",
+            "description": "Package name"
+        },
+        {
+            "id": "program",
+            "type": "promptString",
+            "description": "Program name"
+        }
+    ]
+}

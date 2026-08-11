@@ -1,0 +1,5 @@
+# SetVelAcc.srv
+float64 max_vel
+float64 max_acc
+---
+bool success

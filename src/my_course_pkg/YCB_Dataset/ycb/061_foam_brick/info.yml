@@ -1,0 +1,13 @@
+composite_file: textured_vhacd_composite.obj
+material_file: textured.mtl
+material_map: texture_map.png
+obj_disp_name: foam_brick
+obj_name: textured
+original_file: textured.obj
+submesh_files:
+- textured_vhacd_collision_0.obj
+- textured_vhacd_collision_1.obj
+submesh_props:
+- 0.48076891855803794
+- 0.5192310814419618
+weight: 0.028

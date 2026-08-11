@@ -1,0 +1,90 @@
+<mujoco model="ur10e_2f85 scene">
+  <include file="ur10e_2f85.xml"/>
+  <!--compiler autolimits="true" angle="radian" meshdir="assets" /-->
+
+  <statistic center="0.4 0 0.4" extent="1"/>
+
+  <!-- Cap contact buffer so SAP never writes past its allocation.
+       If this limit is hit MuJoCo prints a warning instead of segfaulting. -->
+  <size nconmax="500" njmax="1000"/>
+
+  <option timestep="0.001" iterations="30" tolerance="1e-3" />
+  <option impratio="10" integrator="implicitfast" cone="elliptic" solver="PGS"/>
+  <option noslip_iterations="10" noslip_tolerance="1e-10" impratio="2"/>
+  <!--<default>
+    <geom solref="0.01 1" solimp="0.95 0.99 0.001 0.5 2" margin="0.002"/>
+  </default>-->
+  <default>
+    <geom solref="0.002 1" solimp="0.95 0.99 0.001" />
+  </default>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="120" elevation="-20" offwidth="1280" offheight="720"/>
+    <quality shadowsize="1024" numslices="8" numstacks="8"/> <!-- Optimize for speed -->
+    <map shadowclip="0.5" fogstart="5" fogend="10" stiffness="100" stiffnessrot="500"/>
+  </visual>
+
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <mesh name="table" file="../../Workspace/Robotertisch_1520x900_sm_250000.obj"/>
+    <mesh name="mounting_plate" file="../../Workspace/mounting_plate.obj" scale="100 100 100"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
+    <geom name="floor" size="0 0 0.001" type="plane" pos="0 0 -0.925" material="groundplane"/>
+    <body name="robot" pos="0 0 0" quat="0 0 0 1">
+      <include file="ur10e_2f85_body.xml"/>
+    </body>
+    <body name="table" pos="-1.24 -0.22 -0.925" quat="-0.707 0 0 0.707">
+      <!--<geom type="mesh" mesh="table" contype="0" conaffinity="0"/> -->
+      <geom type="box" size="0.45 0.76 0.1" pos="-0.37 0.68 0.8" rgba="0.3 0.3 0.3 1" friction="0.9 0.2 0.05"/>
+    </body>
+    <body name="mounting_plate" pos="0 0 -0.025" quat="0 0 0.707 0.707">
+      <!--<geom type="mesh" mesh="mounting_plate" contype="0" conaffinity="0"/> -->
+      <geom type="box" size="0.1 0.025 0.1" rgba="0.3 0.3 0.3 1"/>
+    </body>
+    <body name="robot_base" pos="0 0 0">
+      <geom type="sphere" size="0.01"/>
+    </body>
+    <body name="camera_mount_orbbec_static" pos="-1.5 0.1 0.5" xyaxes="0 -1 0 -0.5 0 -0.9">
+      <geom type="mesh" name="camera_mount_orbbec_static_geom" mesh="camera_mount_orbbec" contype="0" conaffinity="0"/>
+      <camera name="camera_orbbec_static" pos="0.03 -0.135 0.132"  quat="0 -1 0 0" fovy="51.38"/>
+    </body>
+
+    
+    <!-- Free-flying third-person cameras -->
+    <body name="free_camera_body" pos="-1.3 -1.8 1.2">
+      <camera name="camera_third_person" 
+              pos="0 0 0" 
+              xyaxes="0.960 -0.279 0 0.138 0.476 0.869"
+              fovy="45"/>
+      <!-- Optional: small visual indicator -->
+      <geom name="camera_indicator" type="sphere" size="0.02" rgba="0 1 0 0.5" contype="0" conaffinity="0"/>
+    </body>
+    
+    <!-- Side view camera -->
+    <body name="side_camera_body" pos="-0.5 -1.2 0.3">
+      <camera name="camera_side_view" 
+              pos="0 0 0" 
+              xyaxes="1 0 0 0 0 1"
+              fovy="50"/>
+      <geom name="side_camera_indicator" type="sphere" size="0.02" rgba="0 0 1 0.5" contype="0" conaffinity="0"/>
+    </body>
+    
+    <!-- Top-down view camera -->
+    <body name="top_camera_body" pos="-0.3 0.2 1.2">
+      <camera name="camera_top_view" 
+              pos="0 0 0" 
+              euler="0 0 0"
+              fovy="60"/>
+      <geom name="top_camera_indicator" type="sphere" size="0.02" rgba="1 0 1 0.5" contype="0" conaffinity="0"/>
+    </body>
+  </worldbody>
+</mujoco>

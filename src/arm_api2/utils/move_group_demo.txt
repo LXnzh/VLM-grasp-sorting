@@ -1,0 +1,38 @@
+/move_group
+  Subscribers:
+    /parameter_events: rcl_interfaces/msg/ParameterEvent
+    /trajectory_execution_event: std_msgs/msg/String
+  Publishers:
+    /display_contacts: visualization_msgs/msg/MarkerArray
+    /display_planned_path: moveit_msgs/msg/DisplayTrajectory
+    /motion_plan_request: moveit_msgs/msg/MotionPlanRequest
+    /parameter_events: rcl_interfaces/msg/ParameterEvent
+    /robot_description: std_msgs/msg/String
+    /robot_description_semantic: std_msgs/msg/String
+    /rosout: rcl_interfaces/msg/Log
+  Service Servers:
+    /apply_planning_scene: moveit_msgs/srv/ApplyPlanningScene
+    /check_state_validity: moveit_msgs/srv/GetStateValidity
+    /clear_octomap: std_srvs/srv/Empty
+    /compute_cartesian_path: moveit_msgs/srv/GetCartesianPath
+    /compute_fk: moveit_msgs/srv/GetPositionFK
+    /compute_ik: moveit_msgs/srv/GetPositionIK
+    /get_planner_params: moveit_msgs/srv/GetPlannerParams
+    /load_map: moveit_msgs/srv/LoadMap
+    /move_group/describe_parameters: rcl_interfaces/srv/DescribeParameters
+    /move_group/get_parameter_types: rcl_interfaces/srv/GetParameterTypes
+    /move_group/get_parameters: rcl_interfaces/srv/GetParameters
+    /move_group/list_parameters: rcl_interfaces/srv/ListParameters
+    /move_group/set_parameters: rcl_interfaces/srv/SetParameters
+    /move_group/set_parameters_atomically: rcl_interfaces/srv/SetParametersAtomically
+    /plan_kinematic_path: moveit_msgs/srv/GetMotionPlan
+    /query_planner_interface: moveit_msgs/srv/QueryPlannerInterfaces
+    /save_map: moveit_msgs/srv/SaveMap
+    /set_planner_params: moveit_msgs/srv/SetPlannerParams
+  Service Clients:
+
+  Action Servers:
+    /execute_trajectory: moveit_msgs/action/ExecuteTrajectory
+    /move_action: moveit_msgs/action/MoveGroup
+  Action Clients:
+

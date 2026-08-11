@@ -1,0 +1,45 @@
+robot: 
+  arm_name: manipulator  
+  ee_link_name: end_effector_link
+  robot_desc: robot_description
+  move_group_ns: 
+  planning_scene: planning_scene
+  planning_frame: world
+  num_cart_pts: 20
+  joint_states: joint_states
+topic:
+  sub:
+    cmd_pose:
+      name: arm/cmd/pose
+      queue: 1
+    cmd_traj: 
+      name: arm/cmd/traj
+      queue: 1
+    cmd_tool_orientation:
+      name: tool/cmd/orient
+      queue: 1
+    cmd_delta_pose: 
+      name: arm/cmd/deta_pose
+      queue: 1  
+    joint_states:
+      name: joint_states
+      queue: 1
+  pub:
+    display_trajectory:
+      name: arm/display_path
+      queue: 1
+    current_pose:
+      name: arm/state/current_pose
+      queue: 1
+srv: 
+  disable_collision: 
+    name: /move_group/disable_collision
+  add_collision: 
+    name: /move_group/add_collision
+  change_robot_state: 
+    name: arm/change_state
+  open_gripper:
+    name: arm/gripper/open
+  close_gripper:
+    name: arm/gripper/close
+
