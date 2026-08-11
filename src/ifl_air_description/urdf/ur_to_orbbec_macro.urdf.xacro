@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="ur_to_orbbec" params="prefix parent child orbbec_child rotation:=^|${pi}">
+
+    <joint name="${prefix}ur_to_orbbec_joint" type="fixed">
+      <!-- The parent link must be read from the robot model it is attached to. -->
+      <parent link="${parent}"/>
+      <child link="${prefix}ur_to_orbbec_link"/>
+      <origin xyz="0 0 0" rpy="0 0 ${rotation}"/>
+    </joint>
+
+    <link name="${prefix}ur_to_orbbec_link">
+        <visual>
+          <origin xyz="0 0 0.0085" rpy="0 0 0" />
+          <geometry>
+            <mesh filename="package://ifl_air_description/meshes/visual/ur_to_orbbec_adapter_simlab.dae"/>
+          </geometry>
+        </visual>
+        <collision>
+          <origin xyz="0 0 0.0085" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="package://ifl_air_description/meshes/collision/ur_to_orbbec_adapter_m.stl"/>
+          </geometry>
+        </collision>
+        <inertial>
+          <mass value="0.184" />
+          <origin xyz="0 0 0" />
+          <inertia ixx="0.000044" ixy="0.0" ixz="0.0" iyy="0.000027" iyz="0.0" izz="0.000027" />
+        </inertial>
+    </link>
+
+    <joint name="${prefix}camera_tool_joint" type="fixed">
+      <parent link="${prefix}ur_to_orbbec_link"/>
+      <child link="${child}"/>
+      <origin xyz="0 0 0.03" rpy="0 0 0"/>
+    </joint>
+    <link name="${child}"/>
+
+    <joint name="${prefix}camera_side_joint" type="fixed">
+      <parent link="${prefix}ur_to_orbbec_link"/>
+      <child link="${orbbec_child}"/>
+      <origin xyz="0 -0.135 0.1315" rpy="0 0 0"/>
+    </joint>
+    <link name="${orbbec_child}"/>
+
+  </xacro:macro>
+</robot>

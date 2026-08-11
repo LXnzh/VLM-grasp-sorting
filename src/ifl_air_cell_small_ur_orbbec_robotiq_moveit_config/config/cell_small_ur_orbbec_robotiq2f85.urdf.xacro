@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="cell_small_ur_orbbec_robotiq2f85">
+    <xacro:arg name="initial_positions_file2" default="initial_positions.yaml" />
+
+    <!-- Import cell_small_ur_orbbec_robotiq2f85 urdf file -->
+    <xacro:include filename="$(find ifl_air_description)/urdf/cell_small_ur_orbbec_robotiq2f85.urdf.xacro" />
+
+    <!-- Import control_xacro -->
+    <xacro:include filename="cell_small_ur_orbbec_robotiq2f85.ros2_control.xacro" />
+
+
+    <xacro:cell_small_ur_orbbec_robotiq2f85_ros2_control name="FakeSystem" initial_positions_file="$(arg initial_positions_file2)"/>
+
+</robot>

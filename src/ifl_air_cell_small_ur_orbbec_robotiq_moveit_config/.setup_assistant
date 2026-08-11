@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: ifl_air_description
+    relative_path: urdf/cell_small_ur_orbbec_robotiq2f85.urdf.xacro
+  srdf:
+    relative_path: config/cell_small_ur_orbbec_robotiq2f85.srdf
+  package_settings:
+    author_name: Edgar Welte
+    author_email: edgar.welte@kit.edu
+    generated_timestamp: 1758098695
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="roboter_oberdecke" params="prefix parent *origin rotation:=^|${pi}">
+
+    <joint name="${prefix}roboter_oberdecke_base_joint" type="fixed">
+      <!-- The parent link must be read from the robot model it is attached to. -->
+      <parent link="${parent}"/>
+      <child link="${prefix}roboter_oberdecke_link"/>
+      <xacro:insert_block name="origin"/>
+      <!-- <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/> -->
+      <!-- <origin xyz="-0.45 -0.76 2.2" rpy="0 0 ${rotation}"/> -->
+    </joint>
+
+    <link name="${prefix}roboter_oberdecke_link">
+        <collision>
+          <origin xyz="0 0 0.0085" rpy="0 0 0"/>
+          <geometry>
+            <box size="0.9 1.52 0.01"/>
+          </geometry>
+        </collision>
+    </link>
+
+    <!-- <joint name="${prefix}roboter_oberdecke_joint" type="fixed">
+      <parent link="${prefix}roboter_oberdecke_link"/>
+      <child link="${child}"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${child}"/> -->
+
+  </xacro:macro>
+</robot>

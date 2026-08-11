@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="air_ur_orbbec_robotiq">
+  
+  <!-- Import macros -->
+  <xacro:include filename="$(find ifl_air_description)/urdf/ur_orbbec_robotiq2f85_macro.urdf.xacro"/>
+
+  <!-- create link fixed to the "world" -->
+  <link name="world" />
+
+  <xacro:ur_orbbec_robotiq prefix="" parent="world">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:ur_orbbec_robotiq>
+
+
+</robot>

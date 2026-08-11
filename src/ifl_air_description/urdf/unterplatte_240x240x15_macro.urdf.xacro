@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="unterplatte" params="prefix parent child">
+
+    <!-- Unterplatte-Link -->
+    <link name="${prefix}unterplatte_link">
+      <visual>
+        <geometry>
+          <box size="0.24 0.24 0.015"/> <!-- Platte 24x24 cm, 1.5 cm hoch -->
+        </geometry>
+        <origin xyz="0.0 0.0 0.0075" rpy="0 0 0"/>
+        <material name="gray">
+            <color rgba="0.5 0.5 0.5 0.9"/>
+        </material>
+      </visual>
+      <collision>
+        <geometry>
+          <box size="0.24 0.24 0.015"/>
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </collision>
+    </link>
+
+    <!-- Joint von Parent (z. B. Tisch) zur Unterplatte -->
+    <joint name="${prefix}unterplatte_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}unterplatte_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/> <!-- Höhe Tischoberkante -->
+    </joint>
+
+    <!-- Optional Child-Link für Roboter -->
+    <link name="${child}"/>
+    <joint name="${prefix}unterplatte_child_joint" type="fixed">
+      <parent link="${prefix}unterplatte_link"/>
+      <child link="${child}"/>
+      <origin xyz="0 0 0.0075" rpy="0 0 0"/> <!-- Höhe Unterplatte -->
+    </joint>
+  </xacro:macro>
+
+</robot>

@@ -1,0 +1,30 @@
+{
+  "actuated_joint": "robotiq_85_left_knuckle_joint",
+  "closing_axis_tcp": [1.0, 0.0, 0.0],
+  "gripper_base_link": "robotiq_85_base_link",
+  "lower_pad_inner_extreme": "max",
+  "lower_pad_link": "robotiq_85_right_finger_tip_link",
+  "lower_pad_tiebreak_axis_tcp": [0.0, 0.0, 1.0],
+  "lower_pad_tiebreak_extreme": "max",
+  "negative_pad_link": "robotiq_85_right_finger_tip_link",
+  "positive_pad_link": "robotiq_85_left_finger_tip_link",
+  "qpos_max": 0.79,
+  "qpos_min": 0.0,
+  "required_collision_links": [
+    "robotiq_85_base_link",
+    "robotiq_85_left_finger_link",
+    "robotiq_85_left_finger_tip_link",
+    "robotiq_85_left_inner_knuckle_link",
+    "robotiq_85_left_knuckle_link",
+    "robotiq_85_right_finger_link",
+    "robotiq_85_right_finger_tip_link",
+    "robotiq_85_right_inner_knuckle_link",
+    "robotiq_85_right_knuckle_link"
+  ],
+  "T_tcp_gripper_base": [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, -0.262],
+    [0.0, 0.0, 0.0, 1.0]
+  ]
+}

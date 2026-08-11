@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="orbbec_femto_mega" params="prefix parent rotation:=^|${0.0}">
+
+    <joint name="${prefix}orbbec_femto_mega_joint" type="fixed">
+      <!-- The parent link must be read from the robot model it is attached to. -->
+      <parent link="${parent}"/>
+      <child link="${prefix}orbbec_femto_mega_link"/>
+      <origin xyz="0 0 0" rpy="0 0 ${rotation}"/>
+    </joint>
+
+    <link name="${prefix}orbbec_femto_mega_link">
+        <visual>
+          <origin xyz="0 0 0" rpy="0 0 0" />
+          <geometry>
+            <mesh filename="package://ifl_air_description/meshes/visual/orbbec_femto_mega_simlab.dae"/>
+          </geometry>
+        </visual>
+        <collision>
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="package://ifl_air_description/meshes/collision/orbbec_femto_mega_m.stl"/>
+          </geometry>
+        </collision>
+        <inertial>
+          <mass value="0.560" />
+          <origin xyz="0 0 0" />
+          <inertia ixx="2.633e-3" ixy="-2.09855e-4" ixz="-3.762447e-3" iyy="3.021e-3" iyz="-6.1756107e-2" izz="4.861e-4" />
+        </inertial>
+    </link>
+
+  </xacro:macro>
+</robot>

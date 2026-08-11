@@ -1,0 +1,7 @@
+from moveit_configs_utils import MoveItConfigsBuilder
+from moveit_configs_utils.launches import generate_rsp_launch
+
+
+def generate_launch_description():
+    moveit_config = MoveItConfigsBuilder("cell_small_ur_orbbec_robotiq2f85", package_name="ifl_air_cell_small_ur_orbbec_robotiq_moveit_config").to_moveit_configs()
+    return generate_rsp_launch(moveit_config)

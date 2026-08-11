@@ -1,0 +1,62 @@
+robot: 
+  arm_name: panda_arm  
+  ee_link_name: panda_hand_tcp
+  robot_desc: robot_description
+  move_group_ns: 
+  planning_scene: planning_scene
+  planning_frame: world
+  num_cart_pts: 20
+  joint_states: joint_states
+  max_vel_scaling_factor: 0.1
+  max_acc_scaling_factor: 0.1
+  with_planner: true
+topic:
+  sub:
+    cmd_tool_orientation:
+      name: tool/cmd/orient
+      queue: 1
+    joint_states:
+      name: joint_states
+      queue: 1
+    target_pose:
+      name: arm/absolute_pose_cmds
+      queue: 1 
+  pub:
+    display_trajectory:
+      name: arm/display_path
+      queue: 1
+    current_pose:
+      name: arm/state/current_pose
+      queue: 1
+    current_robot_state:
+      name: arm/state/current_state
+      queue: 1
+    joint_command:
+      name: /joint_impedance_controller/commands
+      queue: 10
+    joint_command_traj:
+      name: /panda_arm_controller/joint_trajectory
+      queue: 10
+srv:
+  disable_collision:
+    name: /move_group/disable_collision
+  add_collision:
+    name: /move_group/add_collision
+  change_robot_state:
+    name: arm/change_state
+  set_vel_acc:
+    name: arm/set_vel_acc
+  set_eelink:
+    name: arm/set_eelink
+  set_planonly:
+    name: arm/set_planonly
+
+action:
+  move_to_pose:
+    name: arm/move_to_pose
+  move_to_joint:
+    name: arm/move_to_joint
+  move_to_pose_path:
+    name: arm/move_to_pose_path
+  gripper_control:
+    name: arm/gripper_control

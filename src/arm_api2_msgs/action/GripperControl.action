@@ -1,0 +1,6 @@
+float32 position
+float32 effort
+---
+bool success
+---
+string status

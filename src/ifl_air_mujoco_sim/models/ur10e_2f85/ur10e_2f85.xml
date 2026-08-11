@@ -1,0 +1,145 @@
+<mujoco model="ur10e">
+  <compiler autolimits="true" angle="radian" meshdir="assets" />
+  
+  <default>
+    <default class="_">
+      <default class="ur10e">
+        <material specular="0.5" shininess="0.25" />
+        <joint axis="0 1 0" range="-6.2831900000000003 6.2831900000000003" armature="0.10000000000000001" />
+        <site group="4" rgba="0.5 0.5 0.5 0.29999999999999999" size="0.001" />
+        <general ctrlrange="-6.2831000000000001 6.2831000000000001" biastype="affine" gainprm="5000" biasprm="0 -5000 -500" />
+        <position ctrlrange="-6.2831000000000001 6.2831000000000001" />
+        <default class="size4">
+          <joint damping="10" />
+          <general forcerange="-330 330" />
+        </default>
+        <default class="size3">
+          <joint damping="5" />
+          <general forcerange="-150 150" />
+          <default class="size3_limited">
+            <joint range="-3.1415000000000002 3.1415000000000002" />
+            <general ctrlrange="-3.1415000000000002 3.1415000000000002" />
+          </default>
+        </default>
+        <default class="size2">
+          <joint damping="2" />
+          <general forcerange="-56 56" />
+        </default>
+        <default class="visual">
+          <geom type="mesh" contype="0" conaffinity="0" group="2" />
+        </default>
+        <default class="collision">
+          <geom type="capsule" group="3" />
+          <default class="eef_collision">
+            <geom type="cylinder" />
+          </default>
+        </default>
+      </default>
+    </default>
+    <default class="robotiq_2f85_">
+      <default class="robotiq_2f85_2f85">
+        <mesh scale="0.001 0.001 0.001" />
+        <joint axis="1 0 0" />
+        <general biastype="affine" />
+        <default class="robotiq_2f85_driver">
+          <joint solreflimit="0.0050000000000000001 1" solimplimit="0.94999999999999996 0.98999999999999999 0.001" range="0 0.80000000000000004" armature="0.0050000000000000001" damping="0.10000000000000001" />
+        </default>
+        <default class="robotiq_2f85_follower">
+          <joint pos="0 -0.017999999999999999 0.0064999999999999997" solreflimit="0.0050000000000000001 1" solimplimit="0.94999999999999996 0.98999999999999999 0.001" range="-0.872664 0.872664" armature="0.001" />
+        </default>
+        <default class="robotiq_2f85_spring_link">
+          <joint stiffness="0.050000000000000003" range="-0.29670597283 0.80000000000000004" springref="2.6200000000000001" armature="0.001" damping="0.00125" />
+        </default>
+        <default class="robotiq_2f85_coupler">
+          <joint solreflimit="0.0050000000000000001 1" solimplimit="0.94999999999999996 0.98999999999999999 0.001" range="-1.5700000000000001 0" armature="0.001" />
+        </default>
+        <default class="robotiq_2f85_visual">
+          <geom type="mesh" contype="0" conaffinity="0" group="2" />
+        </default>
+        <default class="robotiq_2f85_collision">
+          <geom type="mesh" group="3" />
+          <default class="robotiq_2f85_pad_box1">
+            <geom type="box" priority="1" size="0.010999999999999999 0.0040000000000000001 0.0093749999999999997" rgba="0.55000000000000004 0.55000000000000004 0.55000000000000004 1" friction="0.69999999999999996" mass="0" solref="0.0040000000000000001 1" solimp="0.94999999999999996 0.98999999999999999 0.001" pos="0 -0.0025999999999999999 0.028125000000000001" />
+          </default>
+          <default class="robotiq_2f85_pad_box2">
+            <geom type="box" priority="1" size="0.010999999999999999 0.0040000000000000001 0.0093749999999999997" rgba="0.45000000000000001 0.45000000000000001 0.45000000000000001 1" friction="0.59999999999999998" mass="0" solref="0.0040000000000000001 1" solimp="0.94999999999999996 0.98999999999999999 0.001" pos="0 -0.0025999999999999999 0.0093749999999999997" />
+          </default>
+        </default>
+      </default>
+    </default>
+  </default>
+  <asset>
+    <material name="black" class="ur10e" rgba="0.033000000000000002 0.033000000000000002 0.033000000000000002 1" />
+    <material name="jointgray" class="ur10e" rgba="0.27800000000000002 0.27800000000000002 0.27800000000000002 1" />
+    <material name="linkgray" class="ur10e" rgba="0.81999999999999995 0.81999999999999995 0.81999999999999995 1" />
+    <material name="urblue" class="ur10e" rgba="0.48999999999999999 0.67800000000000005 0.80000000000000004 1" />
+    <mesh name="base_0" class="_" file="base_0-17748a571800071ec71a97c1fe0ed0dfeecaec53.obj" />
+    <mesh name="base_1" class="_" file="base_1-a1a4cfa3954468e0175ec56fb27f5e25694955f4.obj" />
+    <mesh name="shoulder_0" class="_" file="shoulder_0-cd1e0ebc962fbdd977a64560fc81a8a523428808.obj" />
+    <mesh name="shoulder_1" class="_" file="shoulder_1-648a873db26fedaff350abe1140032cd144d4490.obj" />
+    <mesh name="shoulder_2" class="_" file="shoulder_2-61a62690ee37f742dffab336a79e02cc34c5e2ab.obj" />
+    <mesh name="upperarm_0" class="_" file="upperarm_0-439bf10bbbddfdf0f32074b017c8167d09ceabc5.obj" />
+    <mesh name="upperarm_1" class="_" file="upperarm_1-e99e0c4b6160c445678a5ac8d52bd17474f4256e.obj" />
+    <mesh name="upperarm_2" class="_" file="upperarm_2-0c457604280efa5dc1fe01e910a3b739576d9bdd.obj" />
+    <mesh name="upperarm_3" class="_" file="upperarm_3-49da98da99f96691b8f153df3c3d10fa77ee52f1.obj" />
+    <mesh name="forearm_0" class="_" file="forearm_0-6aef13d388ed3477378acbddc71aeafbd234ad47.obj" />
+    <mesh name="forearm_1" class="_" file="forearm_1-84180874871b5935e090a9db134c14ebdf3a8e1d.obj" />
+    <mesh name="forearm_2" class="_" file="forearm_2-9790653c8dbde0228d36a6019d523b7b3937088b.obj" />
+    <mesh name="forearm_3" class="_" file="forearm_3-d4b465fc5f16992d191ca654ef44561d44b7398c.obj" />
+    <mesh name="wrist1_0" class="_" file="wrist1_0-32e514e0de3c1173aee9024936c36f87c392ab2f.obj" />
+    <mesh name="wrist1_1" class="_" file="wrist1_1-094fc875231e00aee0995cbee2049217f05880eb.obj" />
+    <mesh name="wrist1_2" class="_" file="wrist1_2-5cda401add58b0b6a7751c26807853b7973143b2.obj" />
+    <mesh name="wrist2_0" class="_" file="wrist2_0-9b3b59ac4dd9d2a12bb60b09aa7fee586a6f8dc9.obj" />
+    <mesh name="wrist2_1" class="_" file="wrist2_1-b645672f3e22a06b39bc528d1702c8c98afb69ed.obj" />
+    <mesh name="wrist2_2" class="_" file="wrist2_2-f5247eb4281b2404d5588d9346d39b914c4871da.obj" />
+    <mesh name="wrist3" class="_" file="wrist3-20618107762e9902bfcc60392d9638d83edb2d53.obj" />
+    <material name="robotiq_2f85_metal" class="robotiq_2f85_" rgba="0.57999999999999996 0.57999999999999996 0.57999999999999996 1" />
+    <material name="robotiq_2f85_silicone" class="robotiq_2f85_" rgba="0.18820000000000001 0.18820000000000001 0.18820000000000001 1" />
+    <material name="robotiq_2f85_gray" class="robotiq_2f85_" rgba="0.4627 0.4627 0.4627 1" />
+    <material name="robotiq_2f85_black" class="robotiq_2f85_" rgba="0.14899999999999999 0.14899999999999999 0.14899999999999999 1" />
+    <mesh name="robotiq_2f85_base_mount" class="robotiq_2f85_2f85" file="base_mount-22e57178defe77afb6bdd333bfae16607f1eb3dd.stl" />
+    <mesh name="robotiq_2f85_base" class="robotiq_2f85_2f85" file="base-e5dacbcc3971bfdb549ff8c7d38ea873ca7f2933.stl" />
+    <mesh name="robotiq_2f85_driver" class="robotiq_2f85_2f85" file="driver-97efa43184c575b31ff1f3980641896f51492762.stl" />
+    <mesh name="robotiq_2f85_coupler" class="robotiq_2f85_2f85" file="coupler-0a4240dc94992944cca6ec9e270ff1658fa86c55.stl" />
+    <mesh name="robotiq_2f85_follower" class="robotiq_2f85_2f85" file="follower-39e4b8048f1395ee38cb45b37b5fec0e6f2aaec9.stl" />
+    <mesh name="robotiq_2f85_pad" class="robotiq_2f85_2f85" file="pad-e6a633b2c81740b1f783ec4c6e695c8cc570f09d.stl" />
+    <mesh name="robotiq_2f85_silicone_pad" class="robotiq_2f85_2f85" file="silicone_pad-c284384f3ca6dcdc24d6188a5d1a2d4c42c412ac.stl" />
+    <mesh name="robotiq_2f85_spring_link" class="robotiq_2f85_2f85" file="spring_link-8f50234325193b84e9f86b7a63a24560a389c9bf.stl" />
+    <mesh name="camera_mount_pt1" file="../../CameraMount/Dual_Camera_Mount_pt1.obj" scale="0.01 0.01 0.01"/>
+    <mesh name="camera_mount_pt2" file="../../CameraMount/Dual_Camera_Mount_pt2.obj" scale="0.01 0.01 0.01"/>
+    <mesh name="camera_mount_realsense" file="../../CameraMount/Dual_Camera_Mount_realsense.obj" scale="0.01 0.01 0.01"/>
+    <mesh name="camera_mount_orbbec" file="../../CameraMount/Dual_Camera_Mount_orbbec.obj" scale="0.01 0.01 0.01"/>
+     <mesh name="camera_orbec" file="../../CameraMount/orbec_fempto_mega.obj"/>
+  </asset>
+  <contact>
+    <exclude name="robotiq_2f85__unnamed_contact_0" body1="robotiq_2f85_base" body2="robotiq_2f85_left_driver" />
+    <exclude name="robotiq_2f85__unnamed_contact_1" body1="robotiq_2f85_base" body2="robotiq_2f85_right_driver" />
+    <exclude name="robotiq_2f85__unnamed_contact_2" body1="robotiq_2f85_base" body2="robotiq_2f85_left_spring_link" />
+    <exclude name="robotiq_2f85__unnamed_contact_3" body1="robotiq_2f85_base" body2="robotiq_2f85_right_spring_link" />
+    <exclude name="robotiq_2f85__unnamed_contact_4" body1="robotiq_2f85_right_coupler" body2="robotiq_2f85_right_follower" />
+    <exclude name="robotiq_2f85__unnamed_contact_5" body1="robotiq_2f85_left_coupler" body2="robotiq_2f85_left_follower" />
+  </contact>
+  <equality>
+    <connect name="robotiq_2f85__unnamed_equality_0" class="robotiq_2f85_" solref="0.0050000000000000001 1" solimp="0.94999999999999996 0.98999999999999999 0.001" body1="robotiq_2f85_right_follower" body2="robotiq_2f85_right_coupler" anchor="0 0 0" />
+    <connect name="robotiq_2f85__unnamed_equality_1" class="robotiq_2f85_" solref="0.0050000000000000001 1" solimp="0.94999999999999996 0.98999999999999999 0.001" body1="robotiq_2f85_left_follower" body2="robotiq_2f85_left_coupler" anchor="0 0 0" />
+    <joint name="robotiq_2f85__unnamed_equality_2" class="robotiq_2f85_" solref="0.0050000000000000001 1" solimp="0.94999999999999996 0.98999999999999999 0.001" joint1="robotiq_2f85_right_driver_joint" joint2="robotiq_2f85_left_driver_joint" polycoef="0 1 0 0 0" />
+  </equality>
+  <tendon>
+    <fixed name="robotiq_2f85_split" class="robotiq_2f85_">
+      <joint joint="robotiq_2f85_right_driver_joint" coef="0.5" />
+      <joint joint="robotiq_2f85_left_driver_joint" coef="0.5" />
+    </fixed>
+  </tendon>
+  <actuator>
+    <general name="shoulder_pan" class="size4" joint="shoulder_pan_joint" />
+    <general name="shoulder_lift" class="size4" joint="shoulder_lift_joint" />
+    <general name="elbow" class="size3_limited" joint="elbow_joint" />
+    <general name="wrist_1" class="size2" joint="wrist_1_joint" />
+    <general name="wrist_2" class="size2" joint="wrist_2_joint" />
+    <general name="wrist_3" class="size2" joint="wrist_3_joint" />
+    <general name="robotiq_2f85_fingers_actuator" class="robotiq_2f85_2f85" ctrlrange="0 255" forcerange="-5 5" tendon="robotiq_2f85_split" gainprm="0.31372549999999999 0 0" biasprm="0 -100 -10" />
+  </actuator>
+  <!--keyframe>
+    <key name="home" qpos="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0 0 0 0 0 0 0 0 0" ctrl="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0 0" />
+  </keyframe-->
+</mujoco>
