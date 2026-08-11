@@ -25,6 +25,17 @@ from tkinter import messagebox, scrolledtext, ttk
 
 APP_TITLE = "Robot Grasping Control Console"
 WORKSPACE = Path(__file__).resolve().parent
+KEEP_STILL_GUIDANCE = "KEEP STILL — do not move the selected target."
+TRACKING_READY_GUIDANCE = (
+    "TRACKING READY — 10 seconds: select the target in MuJoCo and "
+    "Ctrl+Shift+right-drag it now."
+)
+PBVS_FOLLOWING_GUIDANCE = (
+    "PBVS FOLLOWING — continue moving, or release the target and keep it still."
+)
+TARGET_STOPPED_GUIDANCE = (
+    "TARGET RELEASED — keep it completely still while the grasp starts."
+)
 
 
 class ProjectLauncher(tk.Tk):
@@ -46,6 +57,10 @@ class ProjectLauncher(tk.Tk):
         self.task_phase = tk.StringVar(
             value="Waiting: start the food-sorting simulation."
         )
+        self.operator_guidance = tk.StringVar(
+            value="KEEP STILL — start the food-sorting simulation."
+        )
+        self.drag_window_active = False
         self.scene_mode: bool | None = None
         self.voice_capture_active = False
         self.active_processes: dict[int, tuple[str, subprocess.Popen[str]]] = {}
@@ -77,6 +92,13 @@ class ProjectLauncher(tk.Tk):
         style.configure("Card.TLabelframe.Label", font=("Arial", 11, "bold"))
         style.configure("Primary.TButton", font=("Arial", 10, "bold"), padding=8)
         style.configure("Action.TButton", font=("Arial", 10), padding=8)
+        style.configure(
+            "Guidance.TLabel",
+            background="#d8f3dc",
+            foreground="#0b3d2e",
+            font=("Arial", 11, "bold"),
+            padding=10,
+        )
 
     def _build_layout(self) -> None:
         content = ttk.Frame(self, padding=16)
@@ -247,7 +269,7 @@ class ProjectLauncher(tk.Tk):
         monitor.grid(row=3, column=0, columnspan=2, sticky="nsew")
         monitor.columnconfigure(1, weight=1)
         monitor.columnconfigure(3, weight=2)
-        monitor.rowconfigure(2, weight=1)
+        monitor.rowconfigure(3, weight=1)
 
         ttk.Label(monitor, text="VLM / Voice API Key:").grid(
             row=0, column=0, sticky="w"
@@ -292,6 +314,20 @@ class ProjectLauncher(tk.Tk):
             text="Clear",
             command=self.clear_log,
         ).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Label(
+            monitor,
+            textvariable=self.operator_guidance,
+            style="Guidance.TLabel",
+            anchor="center",
+            justify="center",
+            wraplength=990,
+        ).grid(
+            row=2,
+            column=0,
+            columnspan=4,
+            sticky="ew",
+            pady=(2, 8),
+        )
         self.log = scrolledtext.ScrolledText(
             monitor,
             height=24,
@@ -299,7 +335,7 @@ class ProjectLauncher(tk.Tk):
             wrap=tk.WORD,
             font=("Consolas", 10),
         )
-        self.log.grid(row=2, column=0, columnspan=4, sticky="nsew")
+        self.log.grid(row=3, column=0, columnspan=4, sticky="nsew")
 
         footer = ttk.Label(content, textvariable=self.status, style="Subtitle.TLabel")
         footer.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(12, 0))
@@ -739,41 +775,78 @@ class ProjectLauncher(tk.Tk):
 
     def _update_task_phase(self, message: str) -> None:
         """Translate the ROS/PBVS state machine into operator guidance."""
+        phase = None
+        guidance = None
         if "TASK_FAILED" in message:
             reason = message.split("TASK_FAILED:", 1)[-1].strip()
-            self.task_phase.set(f"Task failed: {reason}")
+            phase = f"Task failed: {reason}"
+            guidance = f"TASK FAILED — {reason}"
+            self.drag_window_active = False
         elif "SAFE_STOP" in message or "PBVS_TRACKING_LOST" in message:
-            self.task_phase.set(
-                "Safe stop / target lost: do not move the robot or target; inspect the log."
-            )
+            phase = "Safe stop / target lost: inspect the log."
+            guidance = "TRACKING LOST — do not move; inspect the log."
+            self.drag_window_active = False
         elif "DONE: returned to initial pose" in message:
-            self.task_phase.set("Task complete: robot is back at its initial pose.")
+            phase = "Task complete: robot is back at its initial pose."
+            guidance = "TASK COMPLETE — robot returned to its initial pose."
+            self.drag_window_active = False
         elif "EXECUTING_GRASP" in message:
-            self.task_phase.set("Grasp executing: do not move the target or robot.")
-        elif "FOUNDATIONPOSE_REQUEST" in message or "PLANNING_FROM_FOUNDATIONPOSE" in message:
-            self.task_phase.set("Pose estimation / planning: keep the target completely still.")
+            phase = "Grasp executing: do not move the target or robot."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
+        elif (
+            "FOUNDATIONPOSE_REQUEST" in message
+            or "PLANNING_FROM_FOUNDATIONPOSE" in message
+        ):
+            phase = "Pose estimation / planning: keep the target still."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "PBVS_RELATIVE_POSE_STABLE" in message:
-            self.task_phase.set("Target stable: keep everything still; grasp planning is starting.")
+            phase = "Target stable: grasp planning is starting."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "PBVS_WAITING_FOR_CONTINUOUS_STOP" in message:
-            self.task_phase.set("Target stopped: keep it still until the grasp begins.")
-        elif "PBVS_MOTION_GATE: state=STABLE" in message:
-            self.task_phase.set("Target stable: do not move it; the safety window is filling.")
+            phase = "Target stopped: keep it still until grasp begins."
+            guidance = TARGET_STOPPED_GUIDANCE
+            self.drag_window_active = False
         elif "PBVS_FOLLOW_ACTIVE" in message or "PBVS_COMMAND" in message:
-            self.task_phase.set("PBVS following: you may move the target; the robot is tracking it.")
-        elif "TARGET_LOCKED" in message:
-            self.task_phase.set("Target locked: you may now move the selected target instance.")
+            phase = "PBVS following: the robot is tracking the target."
+            guidance = PBVS_FOLLOWING_GUIDANCE
+            self.drag_window_active = False
+        elif "TARGET_LOCKED" in message or "PBVS_OBSERVING_FOR_MOTION" in message:
+            phase = "Tracking ready: the 10-second drag window is active."
+            guidance = TRACKING_READY_GUIDANCE
+            self.drag_window_active = True
+        elif "PBVS_MOTION_GATE: state=STABLE" in message:
+            if self.drag_window_active:
+                phase = "Tracking ready: the 10-second drag window is active."
+            else:
+                phase = "Target stable: the safety window is filling."
+                guidance = KEEP_STILL_GUIDANCE
         elif "SORTING_TARGET_READY" in message:
-            self.task_phase.set("Sorting target ready: SAM2 is locking the selected object. Keep it still.")
+            phase = "Sorting target ready: SAM2 is locking it."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "VLM_SELECTION_COMPLETE" in message:
-            self.task_phase.set("Object selected: VLM is classifying food/non-food. Keep it still.")
+            phase = "Object selected: VLM is classifying it."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "VLM_SELECTION_REQUEST" in message:
-            self.task_phase.set("VLM is selecting the instructed object. Keep it still.")
+            phase = "VLM is selecting the instructed object."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "INITIAL_POSE_READY" in message:
-            self.task_phase.set(
-                "Initial pose ready: your instruction was submitted; VLM/SAM2 is selecting the target. Keep the target still until TARGET_LOCKED appears."
-            )
+            phase = "Initial pose ready: VLM/SAM2 is selecting the target."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
         elif "RETURNING_TO_INITIAL_POSE" in message:
-            self.task_phase.set("Robot moving to its initial pose: do not move the target yet.")
+            phase = "Robot is returning to its initial pose."
+            guidance = KEEP_STILL_GUIDANCE
+            self.drag_window_active = False
+        if phase is not None:
+            self.task_phase.set(phase)
+        if guidance is not None:
+            self.operator_guidance.set(guidance)
 
     def clear_log(self) -> None:
         self.log.configure(state=tk.NORMAL)

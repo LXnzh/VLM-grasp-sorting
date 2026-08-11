@@ -158,5 +158,51 @@ calls `GuardedMotionExecutor.move_to_pose()` through the real stable base class
 and verifies the motion guard plus the stable interpolation settings.
 
 After this repair, the complete `my_course_pkg` functional suite passed 436
-tests and the package rebuilt successfully. A further real banana trial is
-still required to verify close, lift, classified placement, and return home.
+tests and the package rebuilt successfully. The saved follow-up trial
+`logs/gui_ros_log_20260811_221617.txt` contains a successful banana close,
+lift, classified transfer, release, retreat, and return command. The same log
+also contains an interleaved failed run caused by Reset/Start/Start launching
+overlapping work; judge the successful task by its complete state sequence and
+do not start a second task while one is active.
+
+## 2026-08-12 scene settling and tracking cue
+
+The six-object `scene_mode=random` composition and fixed placement-slot order
+remain unchanged. It still selects the configured stratified categories,
+including the singleton banana and hammer pools, plus one remaining object.
+
+The hammer launch was caused by mesh placement using the visual OBJ bottom
+even though MuJoCo contacts use the VHACD collision meshes. For the hammer the
+collision mesh extends slightly below the visual mesh, so it could start in
+the table and be expelled by the contact solver. Mesh placement now:
+
+- retains the rotated visual-mesh centroid for the existing XY layout;
+- uses the minimum rotated Z across every collision mesh for table contact;
+- leaves the collision bottom 0.5 mm above the table;
+- applies this single rule to all mesh objects, with no hammer-specific path.
+
+PBVS now declares a 10-second motion-observation default. The GUI has a
+full-width operator banner above the ROS log. `TARGET_LOCKED` and
+`PBVS_OBSERVING_FOR_MOTION` show the explicit MuJoCo
+Ctrl+Shift+right-drag instruction; an immediately following stable-gate line
+cannot overwrite that prompt while the drag window is active. Follow, stop,
+freeze, execution, failure, and completion states replace the banner with the
+corresponding instruction.
+
+Verified in the project container:
+
+- focused placement/PBVS/GUI tests: 53 passed;
+- complete MuJoCo simulator suite: 91 passed, including unchanged stratified
+  six-object selection and a real YCB hammer settling test;
+- complete `my_course_pkg` functional suite: 443 passed with the three legacy
+  ament linter wrappers excluded as documented above;
+- the real hammer collision bottom is 0.5 mm above the table at spawn and its
+  one-second headless settle stays within 5 mm upward and horizontal motion;
+- changed-file `compileall`, fatal Flake8, and `git diff --check` passed;
+- `colcon build --symlink-install --packages-select my_course_pkg` passed.
+
+At handoff time the visible GUI/simulator were deliberately not force-restarted:
+the API key existed only in GUI memory (or was absent from the environment),
+so killing the old process would discard it. Close the old GUI, rerun
+`python3 gui_manager.py`, and start a new scene before visually judging either
+the banner or the corrected hammer spawn.
