@@ -4,3 +4,5 @@ openai>=1.0
 Pillow
 pycocotools
 requests
+scipy>=1.11,<2
+transforms3d>=0.4.2,<0.5

@@ -572,6 +572,8 @@ class ProjectLauncher(tk.Tk):
     def _process_environment(self, *, food_mode: bool = False) -> dict[str, str]:
         """Return child-process environment without exposing keys in argv."""
         environment = os.environ.copy()
+        if not environment.get("ROS_DOMAIN_ID", "").strip():
+            environment.pop("ROS_DOMAIN_ID", None)
         if food_mode:
             environment["MY_COURSE_SINGLE_BIN_MODE"] = "1"
         key = self.api_key.get().strip()
