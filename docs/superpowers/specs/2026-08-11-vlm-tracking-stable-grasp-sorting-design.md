@@ -10,17 +10,21 @@ Turn `E:\IFL\VLM_grasp_stable` into a complete, independently runnable ROS 2
 workspace whose default product flow is:
 
 1. accept a text or browser-microphone instruction in the GUI;
-2. use a VLM to select one of the 16 supported YCB objects;
-3. use SAM2 to lock the selected instance;
-4. track the instance and follow it with bounded PBVS while it moves;
-5. wait for continuous target and robot stability;
-6. estimate the stable-frame object pose with FoundationPose;
-7. use the object-specific grasp selection, planning, and execution behavior
+2. capture one synchronized overview RGB-D observation while the robot is at
+   its initial/home pose;
+3. use a VLM on that observation to select one of the 16 supported YCB objects
+   and classify it as exactly `food` or `non_food`;
+4. for food, visually locate the randomized `food_bin` in the overview
+   observation and freeze its validated world-frame drop target;
+5. use SAM2 to lock the selected target instance;
+6. track the instance and follow it with bounded PBVS while it moves;
+7. wait for continuous target and robot stability;
+8. estimate the stable-frame object pose with FoundationPose;
+9. use the object-specific grasp selection, planning, and execution behavior
    from `E:\IFL\grasp_stable_pure`;
-8. classify the object as food or non-food;
-9. place food in the RGB-D-localized `food_bin`, or place non-food at the
-   configured default point; and
-10. release, retreat, and return the robot to its initial pose.
+10. explicitly execute the stable planner's `safe_place` suffix with the frozen
+    food-bin target or configured non-food target; and
+11. release, retreat, and return the robot to its initial pose.
 
 The final GitHub remote is
 `https://github.com/LXnzh/VLM-grasp-sorting.git`.
@@ -53,6 +57,20 @@ remote share initial commit
 `fb4878dbd43f83d15cd68ab1f207c9764b1c9652`; the design documentation commits
 sit only on top of that common base before implementation begins.
 
+`7bbfd07` pins the exact import tree, but it is a documentation tip rather than
+the semantic runtime baseline. Runtime intent is additionally anchored to:
+
+- `c3e7a66`: validated 16-object stable-grasp behavior and non-actuating
+  release baseline;
+- `60bd446`: numbered YCB runtime asset loading;
+- `9a4fb37`: the 16-object simulator scene pool; and
+- `0a29604`: the current racquetball instruction aliases.
+
+The food-bin simulator and sorting source is anchored to feature-workspace tree
+`98f386d9c1b3f4b6d7401b93e97c6ed263ebcf40`, with semantic food-sorting scene
+commit `3a203c9`. Only the required bin/sorting behavior is ported; that branch's
+reduced grasp implementation is never used as a grasp baseline.
+
 The target will become a full ROS 2 workspace. The import includes the stable
 repository's committed Dev Container configuration, scripts, ROS packages,
 robot description, MoveIt configuration, MuJoCo simulator, gripper packages,
@@ -64,6 +82,25 @@ The old root-level `my_course_pkg` layout and orphan root `base_env.yaml` will
 be removed. ROS sources will live below `src/`, and the active simulator
 configuration will remain in its canonical package location. Generated
 `build`, `install`, and `log` trees stay ignored.
+
+The canonical simulator package configuration at
+`src/ifl_air_mujoco_sim/env/config/base_env.yaml` will gain the feature branch's
+`classification_bins_single_random` definition. Its simulator loader,
+MuJoCo-scene population code, and launch environment propagation will be
+ported with it. The sorting launch enables exactly one randomized `food_bin`;
+ordinary simulator launches do not silently add one. No runtime path reads the
+deleted root-level YAML.
+
+The sorting scene has its own canonical object-slot set and bin randomization
+region. It does not blindly combine the feature branch's old bin range with the
+pure scene's six fixed slots. At the initial/home camera pose, every sorting
+object slot and the complete outer bin footprint must project inside the RGB-D
+image. In table coordinates, the bin's complete outer footprint plus a safety
+margin must be disjoint from every possible object footprint and robot-base
+exclusion zone, and its release target must be reachable. These visibility,
+separation, table-support, and reachability constraints are configuration tests
+and launch preflight gates. The simulator may randomize the bin only inside the
+qualified region.
 
 The stable grasp package is the code baseline. The target project's VLM,
 tracking, PBVS, sorting, voice, and GUI behavior is ported onto that baseline.
@@ -98,10 +135,19 @@ target list contains only the 16 supported canonical names. Chinese and English
 aliases map to those canonical names; an explicit object name cannot silently
 be replaced by a visually similar object.
 
-The initial synchronized RGB-D frame is saved. The VLM selects the object and
-classifies it as food or non-food. SAM2 creates candidate masks and the existing
-mask verifier selects the target instance. The selected canonical name,
-classification, and provenance are saved in one per-run session record.
+Before PBVS begins, and while the robot is still at its validated initial/home
+pose, the pipeline captures one synchronized overview RGB-D observation plus
+camera intrinsics, camera-to-world TF, frame timestamp, and robot pose. The VLM
+selects the object and classifies it as exactly `food` or `non_food`. If the
+category is food, the bin locator must find `food_bin` in this same overview
+observation and transform its release target into world coordinates. This
+immutable pre-PBVS bin observation prevents the wrist camera's later
+target-following view from hiding the bin.
+
+SAM2 creates candidate masks from the overview image and the existing mask
+verifier selects the target instance. The selected canonical name,
+classification, bin observation when applicable, and provenance are saved in
+one per-run session record.
 
 A high-rate worker maintains atomic RGB, depth, mask, timestamp, and motion
 state snapshots. PBVS runs only while the target is moving or stabilizing. Its
@@ -111,7 +157,8 @@ freshness, jump rejection, and workspace constraints.
 The grasp gate requires continuous target stability and TCP stability. When it
 passes, the pipeline captures one synchronized stable RGB-D-mask observation,
 reanchors the mask, and sends that exact observation to FoundationPose. A stale
-initial frame is never reused for grasp planning.
+initial target frame is never reused for FoundationPose. Conversely, the
+post-PBVS grasp-stable close-up is never used to locate `food_bin`.
 
 ### Stable Grasp Boundary
 
@@ -144,21 +191,34 @@ the actuating phase.
 
 ### Classification Placement Boundary
 
-The initial VLM classification is stored with the selected target. Immediately
-before planning, the stable synchronized RGB-D frame is used to locate the
-`food_bin` when the category is food.
+Classification and bin localization happen before PBVS motion. The overview
+frame is authoritative for both the initial target decision and, for food, the
+visual bin position. The later stable frame is authoritative only for the
+tracked target's FoundationPose input.
 
-The sorting module returns a typed drop target containing position, category,
-bin name, and provenance. Non-food returns the configured default non-food
-position. Food requires a valid RGB-D-localized `food_bin`; missing or invalid
-bin geometry fails before motion.
+The sorting module returns a typed `DropTarget` containing a finite world-frame
+release position, normalized category, bin name, observation timestamp, source
+frame/TF provenance, and detection method. The only accepted categories are
+`food` and `non_food`; `unknown`, missing, or any other category fails before
+PBVS or grasp motion. Non-food returns the configured default non-food position.
+Food requires a valid RGB-D-localized `food_bin` from the overview frame.
+Missing, out-of-workspace, stale, or invalid bin geometry fails before PBVS.
+
+The dynamic sorting entry point always calls the planner with explicit
+`execution_mode="safe_place"`; it never relies on the pure product's default
+`GRASP_EXECUTION_MODE=lift_return`. Its planner boundary requires the typed
+`DropTarget` rather than reading global `DROP_POSITION` or invoking the pure
+planner's empty-table safe-place search. The drop target's X/Y and validated
+release Z are used to construct the explicit drop pose, and the target is
+recorded in plan diagnostics.
 
 The stable planner continues to generate pregrasp, approach, close, hold, and
-lift behavior. It accepts the explicit sorting drop target only for the
-post-lift safe-place suffix: transfer to a high pose, descend, release, retreat,
-and return home. Thus the grasp strategy is identical to the stable baseline
-through reliable lift, while the requested food/non-food destination replaces
-the pure product's return-to-origin suffix.
+lift behavior. The explicit drop pose affects only the post-lift `safe_place`
+suffix: transfer to a high pose, descend, release, and retreat. Thus the grasp
+strategy is identical to the stable baseline through reliable lift, while the
+requested food/non-food destination replaces the pure product's
+return-to-origin suffix. Standalone diagnostic entry points may retain an
+explicit lift-return mode, but the GUI/default product path cannot select it.
 
 ## Failure Handling
 
@@ -168,6 +228,8 @@ observation is unavailable or invalid, including:
 - missing API credentials;
 - unavailable VLM, SAM2, or FoundationPose services;
 - unsupported or inconsistent target identity;
+- a classification other than exactly `food` or `non_food`, including
+  `unknown` or a missing value;
 - missing, ambiguous, or invalid segmentation;
 - stale or invalid synchronized RGB-D data;
 - target loss or unbounded depth jumps;
@@ -203,7 +265,15 @@ Completion requires all four validation layers.
 
 ### Automated Tests
 
-- Preserve the complete stable non-actuating regression suite.
+- Preserve all stable non-actuating tests that exercise shared behavior used
+  by the 16 supported objects. Record the retained test node IDs and add a
+  16-object routing matrix so coverage is explicit rather than tied to the old
+  raw `632` count.
+- Delete positive Tuna/Pudding planner, calibration, finalizer, executor, and
+  live-qualification tests when their retired runtime routes are removed.
+  Rewrite object-list, alias, scene, and CLI cases as negative tests proving
+  those names are rejected before perception or motion. A test is not retained
+  merely to preserve the old count.
 - Add focused tests for target aliases, the 16-object boundary, atomic tracked
   frames, movement/stability gating, PBVS bounds, target-loss handling, typed
   sorting targets, food-bin failure, non-food defaults, voice capture, GUI
@@ -218,6 +288,11 @@ Completion requires all four validation layers.
 - Build the complete ROS workspace with `colcon`.
 - Verify launch files and installed executables are discoverable.
 - Start MuJoCo, MoveIt, camera, gripper, and GUI.
+- Verify the canonical sorting launch creates exactly one randomized
+  `food_bin`, while ordinary pure-style simulator launches create none.
+- Verify all sorting object slots and the randomized bin footprint are visible
+  from the initial/home camera pose and satisfy their configured footprint
+  separation margin before accepting the scene configuration.
 - Verify one complete and unique robot/gripper action graph before motion.
 - Verify camera frames, scene state, and clearance bounds are fresh.
 
@@ -226,9 +301,11 @@ Completion requires all four validation layers.
 Two complete MuJoCo runs are mandatory:
 
 1. A GUI text instruction selects a food object such as
-   `tomato_soup_can`. The target is moved during tracking, PBVS visibly follows,
-   the target stops, stable grasp succeeds, and the object is released into the
-   visually located `food_bin`.
+   `tomato_soup_can`. At the initial/home camera pose the overview RGB-D frame
+   visibly locates the randomized `food_bin` and freezes its world target. The
+   target is then moved during tracking, PBVS visibly follows, the target stops,
+   stable grasp succeeds, the plan reports `execution_mode=safe_place` with the
+   frozen typed drop target, and the object is released into that bin.
 2. Browser microphone input selects a non-food object such as `rubiks_cube`.
    The browser records and transcribes the instruction, the same dynamic
    pipeline runs, stable grasp succeeds, and the object is released at the
@@ -253,12 +330,16 @@ The implementation sequence is:
 
 1. import the committed stable ROS workspace without generated or dirty files;
 2. replace the old package-only layout;
-3. port and integrate VLM, tracking, PBVS, sorting, voice, and GUI modules;
-4. remove excluded-object routes and obsolete compatibility layers;
-5. add the 16-object YCB and grasp runtime data;
-6. update dependency setup, launch files, README, and tests;
-7. complete static, automated, ROS, and end-to-end validation; and
-8. commit the validated result, fast-forward `main`, and push `main` to the new
+3. port the feature branch's bin scene generator and single-bin configuration
+   into the canonical simulator package and sorting launch;
+4. port and integrate VLM, overview-frame bin localization, tracking, PBVS,
+   explicit safe-place placement, voice, and GUI modules;
+5. remove excluded-object routes and obsolete compatibility layers, then
+   replace excluded-object positive regressions with boundary negatives;
+6. add the 16-object YCB and grasp runtime data;
+7. update dependency setup, launch files, README, and tests;
+8. complete static, automated, ROS, and end-to-end validation; and
+9. commit the validated result, fast-forward `main`, and push `main` to the new
    remote.
 
 Commits should remain reviewable and separate the stable workspace/data import,
