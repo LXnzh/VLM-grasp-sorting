@@ -1,0 +1,25 @@
+# Operating-system and editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python caches and test output
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ROS 2 / colcon generated artifacts
+build/
+install/
+log/
+
+# Local environments and credentials
+.venv/
+venv/
+.env
+.env.*
+!.env.example
