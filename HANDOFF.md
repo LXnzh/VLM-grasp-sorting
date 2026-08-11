@@ -279,3 +279,25 @@ No robot motion was launched automatically. The next `gelatin_box` trial
 should show waypoint 19 passing at +5.2 mm, followed by the unchanged final
 waypoint and final verification. A later residual above 6 mm must still hold
 and abort.
+
+## 2026-08-12 GitHub branch and language publish
+
+The integration branch is now named `integrate-stable-tracking-sorting`
+locally and on `origin`. The old remote
+`codex/integrate-stable-tracking-sorting` branch was deleted after the new
+remote ref was verified against local HEAD. The unrelated `.obsidian/`
+directory remains untracked.
+
+GitHub's Jupyter Notebook language count came entirely from
+`src/ifl_air_mujoco_sim/examples/test_render.ipynb`. The file contains about
+3.6 KB of cell source and 3.43 MB of generated execution output. A
+path-specific `.gitattributes` rule now marks only this file as
+`linguist-generated=true`; the Notebook content and outputs are unchanged.
+`git check-attr` confirms the rule. After the change reaches `main`, Python is
+expected to represent about 80% of the remaining recognized source bytes.
+
+Draft PR #2 publishes the complete integration branch into `main`:
+`https://github.com/LXnzh/VLM-grasp-sorting/pull/2`. At creation GitHub
+reported the PR as mergeable with a clean merge state. The repository homepage
+will continue to show the old language totals until the PR is merged and
+GitHub recalculates the default branch.
