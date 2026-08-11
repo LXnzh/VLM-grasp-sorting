@@ -47,6 +47,12 @@ and explicitly authorized.
 existing Git history. `E:\IFL\grasp_stable_pure` is a read-only source
 baseline.
 
+The reproducible import source is stable commit
+`7bbfd07f76ea1c14eab61e39625654b8d4f13d3e`. The target and the new GitHub
+remote share initial commit
+`fb4878dbd43f83d15cd68ab1f207c9764b1c9652`; the design documentation commits
+sit only on top of that common base before implementation begins.
+
 The target will become a full ROS 2 workspace. The import includes the stable
 repository's committed Dev Container configuration, scripts, ROS packages,
 robot description, MoveIt configuration, MuJoCo simulator, gripper packages,
