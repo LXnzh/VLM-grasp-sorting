@@ -119,7 +119,7 @@ def resolve_drop_target(
         category=category,
         bin_name=str(bin_payload.get("name", "food_bin")),
         observation_stamp=observation_stamp,
-        source_frame=camera_frame,
+        source_frame="world",
         rgb_path=str(rgb_path),
         depth_path=str(depth_path),
         detection_method=str(bin_payload.get("detection_method", "unknown")),

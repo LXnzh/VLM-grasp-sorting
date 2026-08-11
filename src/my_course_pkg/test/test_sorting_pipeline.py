@@ -16,6 +16,7 @@ from my_course_pkg.tasks.sorting.drop_target import (
     normalize_sorting_category,
     resolve_drop_target,
 )
+from my_course_pkg.tasks.sorting.locator import _transform_bin_result
 from my_course_pkg.tasks.sorting.vlm_classifier import classify_food
 from my_course_pkg.tasks.tracking import node as tracking_node
 
@@ -26,7 +27,7 @@ def make_drop_target(category="food"):
         category=category,
         bin_name="food_bin" if category == "food" else "default_non_food",
         observation_stamp=12.5,
-        source_frame="camera_orbbec",
+        source_frame="world",
         rgb_path="overview/rgb.png",
         depth_path="overview/depth.npy",
         detection_method="random_color_rgbd",
@@ -101,8 +102,35 @@ def test_food_drop_target_keeps_overview_detection_provenance(
 
     assert target.position == (-0.61, 0.43, 0.14)
     assert target.observation_stamp == 8.25
-    assert target.source_frame == "camera_orbbec"
+    assert target.source_frame == "world"
     assert target.detection_method == "random_color_rgbd"
+
+
+def test_detected_base_link_bin_is_transformed_to_world():
+    result = {
+        "center_xy": np.array([-0.60, 0.42]),
+        "support_height": -0.025,
+        "wall_top_z": 0.085,
+        "drop_position": np.array([-0.60, 0.42, 0.135]),
+    }
+    T_world_base = np.array(
+        [
+            [0.0, -1.0, 0.0, -0.30],
+            [1.0, 0.0, 0.0, -0.20],
+            [0.0, 0.0, 1.0, 0.915],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+
+    transformed = _transform_bin_result(result, T_world_base)
+
+    np.testing.assert_allclose(transformed["center_xy"], [-0.72, -0.80])
+    assert transformed["support_height"] == pytest.approx(0.89)
+    assert transformed["wall_top_z"] == pytest.approx(1.0)
+    np.testing.assert_allclose(
+        transformed["drop_position"],
+        [-0.72, -0.80, 1.05],
+    )
 
 
 def test_explicit_drop_target_uses_pure_grasp_then_safe_place(monkeypatch):
