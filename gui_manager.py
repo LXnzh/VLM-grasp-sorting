@@ -739,7 +739,10 @@ class ProjectLauncher(tk.Tk):
 
     def _update_task_phase(self, message: str) -> None:
         """Translate the ROS/PBVS state machine into operator guidance."""
-        if "SAFE_STOP" in message or "PBVS_TRACKING_LOST" in message:
+        if "TASK_FAILED" in message:
+            reason = message.split("TASK_FAILED:", 1)[-1].strip()
+            self.task_phase.set(f"Task failed: {reason}")
+        elif "SAFE_STOP" in message or "PBVS_TRACKING_LOST" in message:
             self.task_phase.set(
                 "Safe stop / target lost: do not move the robot or target; inspect the log."
             )
@@ -759,6 +762,12 @@ class ProjectLauncher(tk.Tk):
             self.task_phase.set("PBVS following: you may move the target; the robot is tracking it.")
         elif "TARGET_LOCKED" in message:
             self.task_phase.set("Target locked: you may now move the selected target instance.")
+        elif "SORTING_TARGET_READY" in message:
+            self.task_phase.set("Sorting target ready: SAM2 is locking the selected object. Keep it still.")
+        elif "VLM_SELECTION_COMPLETE" in message:
+            self.task_phase.set("Object selected: VLM is classifying food/non-food. Keep it still.")
+        elif "VLM_SELECTION_REQUEST" in message:
+            self.task_phase.set("VLM is selecting the instructed object. Keep it still.")
         elif "INITIAL_POSE_READY" in message:
             self.task_phase.set(
                 "Initial pose ready: your instruction was submitted; VLM/SAM2 is selecting the target. Keep the target still until TARGET_LOCKED appears."

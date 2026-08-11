@@ -270,7 +270,8 @@ def test_overview_classification_and_bin_freeze_precede_tracking(
 
     node._initialize_target()
 
-    assert events[:6] == [
+    business_events = [event for event in events if event != "status"]
+    assert business_events[:6] == [
         "selection",
         "classification",
         "drop_target",

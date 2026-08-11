@@ -451,6 +451,13 @@ def main(args=None):
             raise TimeoutError("No instruction-time RGB-D frame is available.")
         node.set_instruction(instruction, selection_frame)
         node.run_task()
+    except Exception as exc:
+        failure = f"TASK_FAILED: {type(exc).__name__}: {exc}"
+        if node is not None:
+            node._status(failure)
+        else:
+            rgbd.get_logger().error(failure)
+        raise
     finally:
         if node is not None:
             node.stop()

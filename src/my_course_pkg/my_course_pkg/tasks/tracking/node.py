@@ -253,6 +253,7 @@ class FoundationPoseGraspNode(TargetRecoveryMixin, SimClientNode):
             rgb, depth, stamp = self.selection_frame
         initial_dir = self.session_dir / "initial"
         rgb_path, depth_path = self._save_frame(initial_dir, rgb, depth)
+        self._status("VLM_SELECTION_REQUEST: selecting the instructed object")
         selection = vlm_select_target(str(rgb_path), self.instruction)
         self.target_name = selection["selected_object_name"]
         self.grounding_prompt = selection["grounding_prompt"]
@@ -260,6 +261,10 @@ class FoundationPoseGraspNode(TargetRecoveryMixin, SimClientNode):
             selection["accepted_sam2_class_names"]
         )
 
+        self._status(
+            f"VLM_SELECTION_COMPLETE: selected {self.target_name}; "
+            "classifying food/non-food"
+        )
         classification = vlm_classify_food(
             str(rgb_path),
             self.target_name,
@@ -283,6 +288,10 @@ class FoundationPoseGraspNode(TargetRecoveryMixin, SimClientNode):
             node=self,
             camera_frame=CAMERA_FRAME,
             diagnostics_dir=initial_dir / "sorting",
+        )
+        self._status(
+            f"SORTING_TARGET_READY: category={classification['category']}, "
+            f"drop={self.drop_target.bin_name}; requesting SAM2 mask"
         )
         self._write_selection(
             selection,
@@ -539,6 +548,13 @@ def main(args=None):
             )
         node.set_instruction(instruction, selection_frame)
         node.run_task()
+    except Exception as exc:
+        failure = f"TASK_FAILED: {type(exc).__name__}: {exc}"
+        if node is not None:
+            node._status(failure)
+        else:
+            rgbd.get_logger().error(failure)
+        raise
     finally:
         if node is not None:
             node.stop()
