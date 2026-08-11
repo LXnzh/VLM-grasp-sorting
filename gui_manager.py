@@ -12,10 +12,12 @@ output remains available in the built-in task monitor.
 from __future__ import annotations
 
 import os
+import signal
 import shlex
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +38,67 @@ PBVS_FOLLOWING_GUIDANCE = (
 TARGET_STOPPED_GUIDANCE = (
     "TARGET RELEASED — keep it completely still while the grasp starts."
 )
+FULL_STACK_LAUNCH_MARKER = "cell_small_full_mujoco_moveit.launch.py"
+PROCESS_SHUTDOWN_TIMEOUT_S = 3.0
+
+
+def full_stack_process_ids(proc_root=Path("/proc")) -> tuple[int, ...]:
+    """Return live process IDs whose command line contains the full launch."""
+    marker = FULL_STACK_LAUNCH_MARKER.encode()
+    matches = []
+    try:
+        entries = proc_root.iterdir()
+    except OSError:
+        return ()
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            command = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if marker in command:
+            matches.append(int(entry.name))
+    return tuple(sorted(matches))
+
+
+def terminate_process_groups(processes, timeout_s=PROCESS_SHUTDOWN_TIMEOUT_S):
+    """Terminate and reap each live process and its Linux process group."""
+    live = [process for process in processes if process.poll() is None]
+    errors = []
+    for process in live:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except OSError as exc:
+            errors.append(f"SIGTERM process group {process.pid}: {exc}")
+
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    pending = live
+    while pending and time.monotonic() < deadline:
+        pending = [process for process in pending if process.poll() is None]
+        if pending:
+            time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+
+    for process in pending:
+        if process.poll() is not None:
+            continue
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError as exc:
+            errors.append(f"SIGKILL process group {process.pid}: {exc}")
+
+    reap_deadline = time.monotonic() + 1.0
+    for process in live:
+        remaining = max(0.0, reap_deadline - time.monotonic())
+        try:
+            process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            errors.append(f"Could not reap process group {process.pid}")
+    return errors
 
 
 class ProjectLauncher(tk.Tk):
@@ -64,12 +127,14 @@ class ProjectLauncher(tk.Tk):
         self.scene_mode: bool | None = None
         self.voice_capture_active = False
         self.active_processes: dict[int, tuple[str, subprocess.Popen[str]]] = {}
+        self._closing = False
         self._icon = None
 
         self._set_icon()
         self._configure_style()
         self._build_layout()
         self._update_input_mode()
+        self.protocol("WM_DELETE_WINDOW", self.shutdown)
 
     def _set_icon(self) -> None:
         icon_path = WORKSPACE / "gui_icon.png"
@@ -641,6 +706,8 @@ class ProjectLauncher(tk.Tk):
         food_mode: bool,
     ) -> None:
         """Run a ROS command without a desktop terminal and stream its logs."""
+        if self._closing:
+            return
         try:
             process = subprocess.Popen(
                 ["bash", "-lc", command],
@@ -650,6 +717,7 @@ class ProjectLauncher(tk.Tk):
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                start_new_session=True,
             )
         except OSError as exc:
             messagebox.showerror(APP_TITLE, f"Could not start the task: {exc}")
@@ -720,6 +788,18 @@ class ProjectLauncher(tk.Tk):
                 "second simulation or a second Robotiq mock server."
             )
             return
+        external_pids = full_stack_process_ids()
+        if external_pids:
+            pid_text = ", ".join(str(pid) for pid in external_pids)
+            message = (
+                "An existing food-sorting ROS stack is already running outside "
+                f"this GUI (PID: {pid_text}). Stop that stack before starting "
+                "another one."
+            )
+            self.status.set("Existing external food-sorting stack detected.")
+            self._write_log(message)
+            messagebox.showerror(APP_TITLE, message)
+            return
         self.scene_mode = True
         self.launch_terminal(
             "Food-Sorting Simulation",
@@ -728,6 +808,25 @@ class ProjectLauncher(tk.Tk):
             "scene_mode:=random",
             food_mode=True,
         )
+
+    def shutdown(self) -> None:
+        """Close the GUI after terminating every process tree it owns."""
+        if self._closing:
+            return
+        self._closing = True
+        owned_processes = [
+            process
+            for _title, process in list(self.active_processes.values())
+        ]
+        errors = terminate_process_groups(owned_processes)
+        self.active_processes.clear()
+        self.scene_mode = False
+        for error in errors:
+            print(f"GUI shutdown: {error}", file=sys.stderr)
+        try:
+            self.destroy()
+        except tk.TclError:
+            pass
 
     def build_package(self) -> None:
         self.launch_terminal(
@@ -864,8 +963,13 @@ class ProjectLauncher(tk.Tk):
 
 
 def main() -> None:
-    app = ProjectLauncher()
-    app.mainloop()
+    app = None
+    try:
+        app = ProjectLauncher()
+        app.mainloop()
+    finally:
+        if app is not None:
+            app.shutdown()
 
 
 if __name__ == "__main__":

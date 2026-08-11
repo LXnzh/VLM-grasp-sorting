@@ -206,3 +206,44 @@ the API key existed only in GUI memory (or was absent from the environment),
 so killing the old process would discard it. Close the old GUI, rerun
 `python3 gui_manager.py`, and start a new scene before visually judging either
 the banner or the corrected hammer spawn.
+
+## 2026-08-12 GUI-owned process-tree shutdown
+
+Closing the old GUI left its `ros2 launch` process alive because
+`gui_manager.py` destroyed only Tk and did not terminate descendants. A new
+GUI then started a second full stack because its in-memory `active_processes`
+registry could not see the orphan. The ROS graph contained duplicate
+`move_group`, `moveit2_iface`, robot-state publisher, watchdog, and gripper
+nodes. Action clients reported `There may be more than one action server`, and
+goal/result responses crossed between the two stacks.
+
+The old orphan was process group 2830 with launch PID 3242. It and all of its
+children were terminated; a refreshed ROS graph confirmed one remaining set
+of control nodes.
+
+The GUI now owns complete process trees:
+
+- every `Popen` command starts a new Linux session;
+- main-window close and `mainloop()` exit terminate all registered process
+  groups with SIGTERM, one bounded wait, SIGKILL fallback, and root reaping;
+- cleanup is idempotent and refuses new commands after closing begins;
+- before scene launch, `/proc` is scanned for the exact full-stack launch
+  marker; an externally owned or orphan stack blocks a second launch instead
+  of being killed automatically.
+
+Verification:
+
+- GUI lifecycle and guidance tests: 13 passed;
+- complete `my_course_pkg` functional suite: 450 passed with the three legacy
+  ament linter wrappers excluded;
+- changed-file `compileall`, fatal Flake8, and `git diff --check` passed;
+- the live guard detected the one remaining launch as PID 23622;
+- the live ROS graph contained only one `move_group`, `moveit2_iface`,
+  robot-state publisher, watchdog, and gripper adapter.
+
+The visible GUI at implementation time was PID 23534 and had loaded the old
+source before this repair. Its launch PID 23622 remained active, although its
+MuJoCo process had already exited. Do not start another scene from a second
+GUI. When the API key can be re-entered, terminate that old GUI process group,
+start `python3 gui_manager.py` again, and use the new GUI for final close-path
+runtime acceptance.
