@@ -1,3 +1,4 @@
 *.py text eol=lf
 *.sh text eol=lf
 *.bash text eol=lf
+src/ifl_air_mujoco_sim/examples/test_render.ipynb linguist-generated=true
